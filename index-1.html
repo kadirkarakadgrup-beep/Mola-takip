@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="tr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="manifest" href="manifest.json"><meta name="theme-color" content="#0f766e"><link rel="icon" href="ikon-192.png"><link rel="apple-touch-icon" href="ikon-192.png">
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<title>Mola Takip</title>
+<style>
+:root{--bg:#f3f0e8;--card:#fff;--tx:#1c1b18;--mut:#77746b;--ac:#0f766e;--bad:#dc2626;--warn:#d97706;--ok:#16a34a;--bd:#e7e3d8;--sh:0 2px 10px rgba(40,30,10,.07);box-sizing:border-box}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#121211;--card:#1d1d1b;--tx:#f1efe8;--mut:#a3a199;--ac:#14b8a6;--bad:#f87171;--warn:#fbbf24;--ok:#4ade80;--bd:#2f2f2b;--sh:none;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#121211;--card:#1d1d1b;--tx:#f1efe8;--mut:#a3a199;--ac:#14b8a6;--bad:#f87171;--warn:#fbbf24;--ok:#4ade80;--bd:#2f2f2b;--sh:none;color-scheme:dark}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+#app{max-width:520px;margin:0 auto;min-height:100vh}
+.hero{background:linear-gradient(135deg,#0f766e,#115e59);color:#fff;padding:22px 18px 26px;border-radius:0 0 26px 26px;display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.hero h1{margin:2px 0;font-size:26px}.sm{font-size:13px;opacity:.85}
+.wrap{padding:16px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:18px;padding:16px;margin:12px 0;box-shadow:var(--sh)}
+.mut{color:var(--mut);font-size:14px}
+.sec{font-weight:700;margin:20px 4px 6px;font-size:15px;color:var(--mut);text-transform:uppercase;letter-spacing:.04em}
+button,select,input{font:inherit;border-radius:14px;border:1px solid var(--bd);padding:14px;background:var(--card);color:var(--tx);width:100%;box-sizing:border-box;margin:4px 0}
+button{background:var(--ac);color:#fff;border:0;font-weight:700;cursor:pointer}
+button:active{transform:scale(.98)}
+button.g{background:rgba(255,255,255,.18);color:#fff;width:auto;padding:8px 14px;margin:0;font-size:14px}
+button.line{background:transparent;color:var(--mut);border:1px solid var(--bd);width:auto;padding:6px 12px;margin:0;font-size:13px}
+button.red{background:var(--bad);color:#fff;width:auto;padding:6px 12px;margin:0;font-size:13px}
+.ringcard{text-align:center}
+.ringbox{position:relative;width:200px;height:200px;margin:8px auto 12px}
+.ringbox svg{width:100%;height:100%;transform:rotate(-90deg)}
+.ringbox circle{fill:none;stroke-width:10}
+.trk{stroke:var(--bd)}.prg{stroke:var(--ac);stroke-linecap:round;transition:stroke-dashoffset 1s linear}
+.prg.over{stroke:var(--bad)}
+.rt{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:40px;font-weight:800;font-variant-numeric:tabular-nums}
+.over{color:var(--bad)}
+.bk{display:flex;align-items:center;gap:12px;background:var(--card);color:var(--tx);border:1px solid var(--bd);text-align:left;box-shadow:var(--sh);padding:14px}
+.bk .ic{font-size:28px;width:44px;height:44px;border-radius:12px;background:var(--bg);display:flex;align-items:center;justify-content:center}
+.bk .nm{flex:1;font-weight:700}.bk small{display:block;font-weight:400;color:var(--mut)}
+.bk .st{font-size:14px;color:var(--ac)}
+.bk.done{opacity:.6}.bk.done .st{color:var(--ok)}
+.bk:disabled{opacity:.5}
+.tabs{display:flex;gap:6px;margin:14px 0 4px}.tabs button{background:var(--card);color:var(--mut);border:1px solid var(--bd);margin:0;padding:10px}
+.tabs button.on{background:var(--ac);color:#fff;border-color:var(--ac)}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.stat{background:var(--card);border:1px solid var(--bd);border-radius:16px;padding:12px;text-align:center;box-shadow:var(--sh)}
+.stat b{display:block;font-size:26px}.stat span{font-size:12px;color:var(--mut)}
+.row0{display:flex;align-items:center;gap:10px}.fl{flex:1}
+.av{width:40px;height:40px;border-radius:50%;background:var(--ac);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;flex:none}
+.tm{font-variant-numeric:tabular-nums;font-size:18px}
+.bar{height:8px;background:var(--bd);border-radius:6px;margin-top:10px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--ac);border-radius:6px;transition:width 1s linear}
+.bar i.over{background:var(--bad)}
+.item{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--bd)}.item:last-child{border:0}
+.pill{font-size:12px;padding:3px 9px;border-radius:20px;background:var(--bg);color:var(--mut)}
+.pill.bad{background:rgba(220,38,38,.12);color:var(--bad)}
+.err{color:var(--bad);font-size:14px;min-height:18px}
+.login{padding:28px 16px}.login h2{font-size:28px;margin:0 0 4px}
+.empty{text-align:center;color:var(--mut);padding:18px 0}
+.hb{display:flex;gap:6px}.tp{font-family:ui-monospace,monospace;background:var(--bg);border-radius:10px;padding:10px;margin:8px 0;word-break:break-all;font-size:14px}
+</style></head><body><div id="app"></div>
+<script>
+const TYPES=[["sabah","Sabah kahvaltısı",15,"🥐"],["cay1","Çay molası 1",20,"☕"],["yemek","Öğle yemeği",30,"🍽️"],["cay2","Çay molası 2",20,"🫖"],["aksam","Akşam kahvaltısı",15,"🌙"]];
+const ADMIN_PIN="1234"; // yönetici şifresi: değiştirin
+const C=326.7;
+const ADMIN_TOPIC="mola-7fc53-yonetici-x9k2q7"; // ntfy yönetici konusu (tahmin edilmesin)
+const rt=()=>"mola-"+Math.random().toString(36).slice(2,10)+Math.random().toString(36).slice(2,6);
+let snd=false,_nt=0;try{snd=localStorage.getItem("mt_snd")==="1"}catch(e){}
+let S={staff:{},active:{},logs:{}},me=null,db=null,mode="in",msg="",atab="live",cdel=null;
+try{me=JSON.parse(localStorage.getItem("mt_me"))}catch(e){}
+const today=()=>new Date().toLocaleDateString("sv");
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const hm=t=>new Date(t).toLocaleTimeString("tr",{hour:"2-digit",minute:"2-digit"});
+const fmt=ms=>{const s=Math.abs(Math.round(ms/1000));return String(Math.floor(s/60)).padStart(2,"0")+":"+String(s%60).padStart(2,"0")};
+const ini=n=>n.split(" ").filter(Boolean).map(w=>w[0]).slice(0,2).join("").toUpperCase();
+const T=k=>TYPES.find(x=>x[0]===k);
+const $=id=>document.getElementById(id);
+const saveLocal=()=>{try{localStorage.setItem("mt_data",JSON.stringify(S))}catch(e){}};
+async function put(c,id,d){try{if(db)await db.doc(c+"/"+id).set(d);else{S[c][id]=d;saveLocal()}}catch(e){msg="Kaydedilemedi."}render()}
+async function del(c,id){try{if(db)await db.doc(c+"/"+id).delete();else{delete S[c][id];saveLocal()}}catch(e){msg="Silinemedi."}cdel=null;render()}
+function setMe(v){me=v;try{v?localStorage.setItem("mt_me",JSON.stringify(v)):localStorage.removeItem("mt_me")}catch(e){}msg="";render()}
+const logout=()=>setMe(null);
+function login(){
+  const pin=$("pin").value.trim();
+  if(mode==="adm"){return pin===ADMIN_PIN?setMe({role:"admin"}):(msg="Şifre yanlış",render())}
+  if(!/^\d{4}$/.test(pin)){msg="4 haneli PIN girin";return render()}
+  if(mode==="reg"){const name=$("name").value.trim();if(!name){msg="Ad soyad girin";return render()}
+    const id="s"+Date.now().toString(36);put("staff",id,{name,pin,ntopic:rt()}).then(()=>setMe({role:"staff",id}));return}
+  const id=$("who").value,s=S.staff[id];
+  s&&s.pin===pin?setMe({role:"staff",id}):(msg="PIN yanlış",render())
+}
+function ntfy(topic,title,message,delay){if(!topic)return;try{fetch("https://ntfy.sh",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({topic,title,message,delay,priority:4,tags:["alarm_clock"]})}).catch(()=>{})}catch(e){}}
+function speak(t){try{if(!snd||!window.speechSynthesis)return;const u=new SpeechSynthesisUtterance(t);u.lang="tr-TR";u.rate=.95;const v=speechSynthesis.getVoices().find(v=>v.lang&&v.lang.toLowerCase().startsWith("tr"));if(v)u.voice=v;speechSynthesis.speak(u)}catch(e){}}
+function togSnd(){snd=!snd;try{localStorage.setItem("mt_snd",snd?"1":"0")}catch(e){}if(snd)speak("Anons açık");render()}
+function copyT(t){try{navigator.clipboard.writeText(t).then(()=>{msg="Kopyalandı";render();setTimeout(()=>{msg="";render()},1800)})}catch(e){}}
+function startBreak(k){try{window.Notification&&Notification.permission==="default"&&Notification.requestPermission()}catch(e){}
+  const s=S.staff[me.id],t=T(k),n=s.name.split(" ")[0];
+  put("active",me.id,{type:k,name:s.name,start:Date.now(),dur:t[2]});
+  ntfy(s.ntopic,"Mola bitti",n+", molan doldu, işe dön.",t[2]+"m");
+  ntfy(ADMIN_TOPIC,"Mola doldu",s.name+" molası doldu.",t[2]+"m")}
+async function endFor(i){const a=S.active[i];if(!a)return;const end=Date.now(),d=today();
+  await put("logs",i+"_"+a.type+"_"+d,{staffId:i,name:a.name,type:a.type,start:a.start,end,dur:a.dur,date:d});
+  await del("active",i)}
+function ntfyCard(t){return `<div class="card"><b>📲 Bildirim al</b><div class="mut">ntfy uygulamasını yükle, "Abone ol" de, bu konuyu yaz:</div><div class="tp">${esc(t||"hazırlanıyor...")}</div>${t?`<button class="line" onclick="copyT('${t}')">Kopyala</button>`:""}</div>`}
+function adminCard(){return `<div class="card"><b>📲 Yönetici bildirimi</b><div class="mut">ntfy uygulamasında bu konuya abone ol; biri molasını bitirince telefonun çalar:</div><div class="tp">${ADMIN_TOPIC}</div><button class="line" onclick="copyT('${ADMIN_TOPIC}')">Kopyala</button></div>`}
+function notify(t,b){try{if(window.Notification&&Notification.permission==="granted"){navigator.serviceWorker.getRegistration().then(r=>r?r.showNotification(t,{body:b,icon:"ikon-192.png",vibrate:[300,150,300]}):new Notification(t,{body:b}))}}catch(e){}}
+function loginHTML(){
+  const ids=Object.keys(S.staff);
+  return `<div class="hero"><div><div class="sm">Personel</div><h1>☕ Mola Takip</h1><div class="sm">Giriş yapın veya kayıt olun</div></div></div><div class="wrap">
+  <div class="tabs">${[["in","Giriş"],["reg","Kayıt ol"],["adm","Yönetici"]].map(([m,l])=>`<button class="${mode===m?"on":""}" onclick="mode='${m}';msg='';render()">${l}</button>`).join("")}</div>
+  <div class="card">${mode==="reg"?`<input id="name" placeholder="Ad soyad">`:""}
+  ${mode==="in"?(ids.length?`<select id="who">${ids.map(i=>`<option value="${i}">${esc(S.staff[i].name)}</option>`).join("")}</select>`:`<div class="mut">Henüz kayıtlı personel yok. "Kayıt ol" sekmesini kullanın.</div>`):""}
+  <input id="pin" type="password" inputmode="numeric" maxlength="${mode==="adm"?8:4}" placeholder="${mode==="adm"?"Yönetici şifresi":"4 haneli PIN"}">
+  <div class="err">${esc(msg)}</div><button onclick="login()">${mode==="reg"?"Kaydol":"Giriş yap"}</button></div>
+  ${db?"":`<div class="mut">Çevrimdışı: veriler yalnızca bu cihazda saklanır.</div>`}</div>`}
+function staffHTML(){
+  const s=S.staff[me.id];if(!s)return logout(),"";
+  if(!s.ntopic&&!_nt){_nt=1;put("staff",me.id,Object.assign({},s,{ntopic:rt()}))}
+  const act=S.active[me.id],d=today(),done=TYPES.filter(t=>S.logs[me.id+"_"+t[0]+"_"+d]).length;
+  let h=`<div class="hero"><div><div class="sm">${new Date().toLocaleDateString("tr",{weekday:"long",day:"numeric",month:"long"})}</div><h1>Merhaba, ${esc(s.name.split(" ")[0])}</h1><div class="sm">Bugün ${done}/${TYPES.length} mola kullandın</div></div><div class="hb"><button class="g" onclick="togSnd()">${snd?"🔊":"🔇"}</button><button class="g" onclick="logout()">Çıkış</button></div></div><div class="wrap"><div class="err">${esc(msg)}</div>`;
+  if(act){const t=T(act.type),e=act.start+act.dur*60000;
+    h+=`<div class="card ringcard"><div class="mut">${t[3]} ${t[1]} · ${t[2]} dk</div><div class="ringbox"><svg viewBox="0 0 120 120"><circle class="trk" cx="60" cy="60" r="52"/><circle class="prg" data-ring data-s="${act.start}" data-e="${e}" cx="60" cy="60" r="52"/></svg><div class="rt" data-end="${e}">--:--</div></div><div class="mut">Molanı yönetici bitirecek.</div></div>`}
+  h+=`<div class="sec">Bugünkü molalar</div>`+TYPES.map(t=>{const u=S.logs[me.id+"_"+t[0]+"_"+d];
+    return `<button class="bk ${u?"done":""}" ${u||act?"disabled":""} onclick="startBreak('${t[0]}')"><span class="ic">${t[3]}</span><span class="nm">${t[1]}<small>${t[2]} dakika</small></span><span class="st">${u?"✓ "+hm(u.start):(act?"":"Başlat")}</span></button>`}).join("")+ntfyCard(s.ntopic)+`</div>`;
+  return h}
+function adminHTML(){
+  const d=today(),now=Date.now(),act=Object.entries(S.active),logs=Object.values(S.logs).filter(l=>l.date===d).sort((a,b)=>a.start-b.start);
+  const over=act.filter(([i,a])=>now>a.start+a.dur*60000).length,staff=Object.entries(S.staff);
+  let h=`<div class="hero"><div><div class="sm">Yönetici paneli</div><h1>Mola Takip</h1><div class="sm">${new Date().toLocaleDateString("tr",{weekday:"long",day:"numeric",month:"long"})}</div></div><div class="hb"><button class="g" onclick="togSnd()">${snd?"🔊":"🔇"}</button><button class="g" onclick="logout()">Çıkış</button></div></div><div class="wrap">
+  <div class="stats"><div class="stat"><b>${act.length}</b><span>Molada</span></div><div class="stat"><b class="${over?"over":""}">${over}</b><span>Süre aşan</span></div><div class="stat"><b>${staff.length}</b><span>Personel</span></div></div>
+  <div class="tabs">${[["live","Canlı"],["report","Rapor"],["staff","Personel"]].map(([m,l])=>`<button class="${atab===m?"on":""}" onclick="atab='${m}';render()">${l}</button>`).join("")}</div><div class="err">${esc(msg)}</div>`;
+  if(atab==="live")h+=act.length?act.map(([i,a])=>{const t=T(a.type),e=a.start+a.dur*60000;
+    return `<div class="card"><div class="row0"><span class="av">${esc(ini(a.name))}</span><div class="fl"><b>${esc(a.name)}</b><div class="mut">${t[3]} ${t[1]} · ${hm(a.start)}</div></div><b class="tm" data-end="${e}">--:--</b></div><div class="bar"><i data-bar data-s="${a.start}" data-e="${e}"></i></div><button style="margin-top:10px" onclick="endFor('${i}')">Molayı bitir</button></div>`}).join(""):`<div class="card empty">Şu an kimse molada değil.</div>`;
+  if(atab==="report")h+=`<div class="card">${logs.length?logs.map(l=>{const u=Math.round((l.end-l.start)/60000),o=u-l.dur;
+    return `<div class="item"><span class="av">${esc(ini(l.name))}</span><div class="fl"><b>${esc(l.name)}</b><div class="mut">${T(l.type)[3]} ${T(l.type)[1]} · ${hm(l.start)}-${hm(l.end)}</div></div><span class="pill ${o>0?"bad":""}">${u} dk${o>0?" (+"+o+")":""}</span></div>`}).join(""):`<div class="empty">Bugün tamamlanan mola yok.</div>`}</div>`;
+  if(atab==="staff")h+=adminCard()+`<div class="card">${staff.map(([i,s])=>{const n=TYPES.filter(t=>S.logs[i+"_"+t[0]+"_"+d]).length;
+    return `<div class="item"><span class="av">${esc(ini(s.name))}</span><div class="fl"><b>${esc(s.name)}</b><div class="mut">Bugün ${n}/${TYPES.length} mola</div></div>${cdel===i?`<button class="red" onclick="del('staff','${i}')">Emin misin?</button>`:`<button class="line" onclick="cdel='${i}';render()">Sil</button>`}</div>`}).join("")||`<div class="empty">Kayıtlı personel yok.</div>`}</div>`;
+  return h+`</div>`}
+function render(){
+  if(!me&&document.activeElement&&document.activeElement.tagName==="INPUT")return;
+  $("app").innerHTML=!me?loginHTML():me.role==="admin"?adminHTML():staffHTML();tick()}
+let buzzed={};
+function tick(){const n=Date.now();
+  document.querySelectorAll("[data-end]").forEach(el=>{const r=+el.dataset.end-n;el.textContent=(r<0?"+":"")+fmt(r);el.classList.toggle("over",r<0)});
+  document.querySelectorAll("[data-ring]").forEach(el=>{const s=+el.dataset.s,e=+el.dataset.e,p=Math.max(0,Math.min(1,(e-n)/(e-s)));el.style.strokeDasharray=C;el.style.strokeDashoffset=C*(1-p);el.classList.toggle("over",n>e)});
+  document.querySelectorAll("[data-bar]").forEach(el=>{const s=+el.dataset.s,e=+el.dataset.e,p=Math.max(0,Math.min(1,(e-n)/(e-s)));el.style.width=(n>e?100:p*100)+"%";el.classList.toggle("over",n>e)});
+  const L=!me?[]:me.role==="admin"?Object.entries(S.active):(S.active[me.id]?[[me.id,S.active[me.id]]]:[]);
+  L.forEach(([i,a])=>{const e=a.start+a.dur*60000;if(n<=e)return;const k=i+"_"+a.start,last=buzzed[k]||0;
+    if(!last||n-last>120000){buzzed[k]=n;speak(a.name.split(" ")[0]+", molan doldu, işe dön.");
+      if(!last&&me.role==="staff"){try{navigator.vibrate&&navigator.vibrate([300,150,300])}catch(x){}notify("Molan bitti","Süre doldu, işe dön.")}}})}
+setInterval(tick,1000);
+setInterval(()=>{if(me&&me.role==="admin"&&!cdel)render()},15000);
+(async()=>{
+  try{
+    firebase.initializeApp({apiKey:"AIzaSyD_Bl_RC8xzscXA3-GP8X2tdBi6tFhCs8E",authDomain:"mola-takip-7fc53.firebaseapp.com",projectId:"mola-takip-7fc53",storageBucket:"mola-takip-7fc53.firebasestorage.app",messagingSenderId:"130287831940",appId:"1:130287831940:web:c3a804d90a0225231b2bd1"});
+    await firebase.auth().signInAnonymously();
+    db=firebase.firestore();
+    ["staff","active","logs"].forEach(c=>db.collection(c).onSnapshot(sn=>{S[c]={};sn.docs.forEach(x=>S[c][x.id]=x.data());render()},e=>{msg="Bağlantı hatası: "+e.code;render()}));
+  }catch(e){db=null;msg="Sunucuya bağlanılamadı";try{S=Object.assign(S,JSON.parse(localStorage.getItem("mt_data")))}catch(x){}render()}
+})();
+try{navigator.serviceWorker&&navigator.serviceWorker.register("sw.js")}catch(e){}
+render();
+</script></body></html>
