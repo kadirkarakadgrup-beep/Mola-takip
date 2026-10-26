@@ -6,7 +6,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-<meta name="ver" content="2026-10-24.0130"><title>Mola Takip</title>
+<meta name="ver" content="2026-10-24.0200"><title>Mola Takip</title>
 <style>
 :root{--bg:#f3f0e8;--card:#fff;--tx:#1c1b18;--mut:#77746b;--ac:#0f766e;--bad:#dc2626;--warn:#d97706;--ok:#16a34a;--bd:#e7e3d8;--sh:0 2px 10px rgba(40,30,10,.07);box-sizing:border-box}
 @media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#121211;--card:#1d1d1b;--tx:#f1efe8;--mut:#a3a199;--ac:#14b8a6;--bad:#f87171;--warn:#fbbf24;--ok:#4ade80;--bd:#2f2f2b;--sh:none;color-scheme:dark}}
@@ -177,7 +177,7 @@ function staffHTML(){
   const act=S.active[me.id],d=today(),done=TYPES.filter(t=>{const L=S.logs[me.id+"_"+t[0]+"_"+d];return L&&L.done!==false}).length;
   let h=`<div class="hero"><div><div class="sm">${bname(bid(s))}${dpt(s)?" · "+dpt(s):""} · ${new Date().toLocaleDateString("tr",{weekday:"long",day:"numeric",month:"long"})}</div><h1>Merhaba, ${esc(s.name.split(" ")[0])}</h1><div class="sm">Bugün ${done}/${TYPES.length} mola kullandın</div></div><div class="hb"><button class="g" onclick="togSnd()">${snd?"🔊":"🔇"}</button><button class="g" onclick="logout()">Çıkış</button></div></div><div class="wrap"><div class="err">${esc(msg)}</div>`;
   if(act){const t=T(act.type),e=act.start+act.dur*60000;
-    h+=`<div class="card ringcard"><div class="mut">${t[3]} ${t[1]} · ${Math.ceil(act.dur)} dk</div><div class="ringbox"><svg viewBox="0 0 120 120"><circle class="trk" cx="60" cy="60" r="52"/><circle class="prg" data-ring data-s="${act.start}" data-e="${e}" cx="60" cy="60" r="52"/></svg><div class="rt" data-end="${e}">--:--</div></div><div class="mut">Molanı yönetici bitirecek.</div></div>`}
+    h+=`<div class="card ringcard"><div class="mut">${t[3]} ${t[1]} · ${Math.ceil(act.dur)} dk</div><div class="ringbox"><svg viewBox="0 0 120 120"><circle class="trk" cx="60" cy="60" r="52"/><circle class="prg" data-ring data-s="${act.start}" data-e="${e}" cx="60" cy="60" r="52"/></svg><div class="rt" data-end="${e}">--:--</div></div><button onclick="if(confirm('Molayı bitirmek istiyor musun?'))endFor('${me.id}')">Molayı bitir</button></div>`}
   h+=`<div class="sec">Bugünkü molalar</div>`+TYPES.map(t=>{const L=S.logs[me.id+"_"+t[0]+"_"+d],dn=L&&L.done!==false,pt=L&&L.done===false,ok=pt||avail(t[0]),left=pt?Math.max(1,Math.ceil(((L.full||L.dur)*60000-(L.used||0))/60000)):0;
     const sub=pt?`${left} dk kaldı, devam edebilirsin`:`${durOf(t[0],bid(s))} dakika${WINL[t[0]]?" · "+WINL[t[0]]:""}`,st=dn?"✓ "+hm(L.start):pt?"Devam et":(!ok?"Kapalı":(act?"":"Başlat"));
     return `<button class="bk ${dn?"done":""}" ${dn||act||!ok?"disabled":""} onclick="startBreak('${t[0]}')"><span class="ic">${t[3]}</span><span class="nm">${t[1]}<small>${sub}</small></span><span class="st">${st}</span></button>`}).join("")+(s.email||s.phone?"":contactCard())+ntfyCard(s.ntopic)+`</div>`;
