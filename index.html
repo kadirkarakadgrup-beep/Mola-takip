@@ -65,7 +65,7 @@ details.tl summary{font-weight:700;cursor:pointer;color:#cbd5e1}details.tl .bar{
 .xl th,.xl td{border:1px solid #000;padding:5px 4px;text-align:center;white-space:nowrap}
 .xl .nmc{position:sticky;left:0;background:#fff;text-align:left;font-weight:800;padding:6px;z-index:1}
 .xl th{background:#fff;font-size:11px}.xl .dn{color:#1d4ed8;text-decoration:underline}
-.xl2 th{background:#217346;color:#fff}.xl2 .l{text-align:left}.xl2 td.r{text-align:right}.xl2 td.g{color:#166534;font-weight:800}
+.xl2{min-width:0!important;width:100%;font-size:12px!important}.xl2 th,.xl2 td{padding:5px 3px!important;white-space:normal!important}.xl2 th{background:#217346;color:#fff}.xl2 .l{text-align:left}.xl2 td.r{text-align:right}.xl2 td.g{color:#166534;font-weight:800}
 .xl2 tr:nth-child(even) td{background:#f1f5f9}.xl2 tr.tot td{background:#e2e8f0;font-weight:800}
 .xl .td{background:#bbf7d0!important}
 .xl td.c{font-weight:700;font-size:12px}.xl td.c small{display:block;font-weight:700;font-size:11px;text-decoration:underline}
@@ -263,23 +263,23 @@ const inB=r=>r.sube==B;
 let RPV=[];
 function rptTable(L,del){
   const tc=L.reduce((a,r)=>a+Number(r.ciro||0),0),th=L.reduce((a,r)=>a+Number(r.hesap||0),0);
-  return '<div style="overflow:auto"><table class="xl xl2"><tr><th>#</th><th class="l">Ad Soyad</th><th>Dönem</th><th>Ciro (TL)</th><th>Hesap</th><th>Ortalama (TL)</th>'+(del?'<th></th>':'')+'</tr>'
-   +L.map((r,i)=>`<tr><td>${i+1}</td><td class="l"><b>${esc(nice(r.name))}</b></td><td>${esc(r.range||'')}</td><td class="r">${tl2(r.ciro)}</td><td>${r.hesap}</td><td class="r g">${tl2(r.ort)}</td>${del?`<td><button class="a x" style="padding:4px 8px" data-k="${esc(r.key)}" onclick="rptDel(this.dataset.k)">Sil</button></td>`:''}</tr>`).join('')
-   +`<tr class="tot"><td></td><td class="l">TOPLAM</td><td></td><td class="r">${tl2(tc)}</td><td>${th}</td><td class="r">${th?tl2(tc/th):'-'}</td>${del?'<td></td>':''}</tr></table></div>`;
+  return '<div style="overflow:auto"><table class="xl xl2"><tr><th>#</th><th class="l">Ad Soyad</th><th>Ciro</th><th>Hesap</th><th>Ort.</th>'+(del?'<th></th>':'')+'</tr>'
+   +L.map((r,i)=>`<tr><td>${i+1}</td><td class="l"><b>${esc(nice(r.name))}</b></td><td class="r">${tl2(r.ciro)}</td><td>${r.hesap}</td><td class="r g">${tl2(r.ort)}</td>${del?`<td><button class="a x" style="padding:4px 8px" data-k="${esc(r.key)}" onclick="rptDel(this.dataset.k)">Sil</button></td>`:''}</tr>`).join('')
+   +`<tr class="tot"><td></td><td class="l">TOPLAM</td><td class="r">${tl2(tc)}</td><td>${th}</td><td class="r">${th?tl2(tc/th):'-'}</td>${del?'<td></td>':''}</tr></table></div>`;
 }
 function rptXls(L){
   if(!L||!L.length){msg('İndirilecek kayıt yok.');return;}
   const tc=L.reduce((a,r)=>a+Number(r.ciro||0),0),th=L.reduce((a,r)=>a+Number(r.hesap||0),0);
-  const rows=[['#','Ad Soyad','Dönem','Ciro (TL)','Hesap Sayısı','Ortalama (TL)']].concat(L.map((r,i)=>[i+1,nice(r.name),r.range||'',Number(r.ciro),Number(r.hesap),Number(r.ort)]));
-  rows.push(['','TOPLAM','',tc,th,th?Math.round(tc/th*100)/100:0]);
+  const rows=[['#','Ad Soyad','Ciro (TL)','Hesap Sayısı','Ortalama (TL)']].concat(L.map((r,i)=>[i+1,nice(r.name),Number(r.ciro),Number(r.hesap),Number(r.ort)]));
+  rows.push(['','TOPLAM',tc,th,th?Math.round(tc/th*100)/100:0]);
   const fn='Ciro_Ortalama_'+BR[B].replace(/\s/g,'_')+'_'+new Date().toISOString().slice(0,10);
-  try{if(typeof XLSX!=='undefined'){const ws=XLSX.utils.aoa_to_sheet(rows);ws['!cols']=[{wch:4},{wch:24},{wch:22},{wch:14},{wch:12},{wch:14}];const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,BR[B]);XLSX.writeFile(wb,fn+'.xlsx');return;}}catch(e){}
+  try{if(typeof XLSX!=='undefined'){const ws=XLSX.utils.aoa_to_sheet(rows);ws['!cols']=[{wch:4},{wch:24},{wch:14},{wch:12},{wch:14}];const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,BR[B]);XLSX.writeFile(wb,fn+'.xlsx');return;}}catch(e){}
   const csv='\ufeff'+rows.map(r=>r.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(';')).join('\r\n');
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download=fn+'.csv';document.body.appendChild(a);a.click();a.remove();
 }
 function rptShow(){google.script.run.withFailureHandler(e=>msg(emsg(e))).withSuccessHandler(r=>{
-  r=r.filter(inB);RPV=r;
-  pop('📊 Ciro Ortalama · '+BR[B],r.length?rptTable(r,false)+'<button class="a ed" style="width:100%;margin-top:10px" onclick="rptXls(RPV)">⬇ Excel indir</button>':'<span class="sub">Bu şube için henüz rapor girilmemiş.</span>',true);
+  r=r.filter(inB);
+  pop('📊 Ciro Ortalama · '+BR[B],r.length?rptTable(r,false):'<span class="sub">Bu şube için henüz rapor girilmemiş.</span>',true);
 }).listReportsPub();}
 function rptLoad(){if(M!='y')return;google.script.run.withFailureHandler(()=>{}).withSuccessHandler(r=>{RP=r;rptDraw();}).listReports(PIN);}
 function rptDraw(){
