@@ -138,7 +138,7 @@ function head(){
         <button class="a off" onclick="test('yonetici')">🔔 Test Bildirimi</button>
         <button class="a ed" onclick="tok()">🔑 Ntfy Token</button>
         <button class="a ed" onclick="voiceTest()">🔊 Anons Testi</button><button class="a off" onclick="shiftClr()">🗑 Vardiyayı Temizle</button></div></details>`
-    :`<button class="a ed" onclick="rptShow()">📊 Ciro Ortalama</button><button class="a ed" onclick="shiftShow()">🕗 Vardiya</button><button class="a" style="flex-basis:100%" onclick="regMe()">➕ Kayıt Ol (personel listesine ekle)</button>`;
+    :`<button class="a ed" onclick="rptShow()">📊 Ciro Ortalama</button><button class="a ed" onclick="shiftShow()">🕗 Vardiya</button><button class="a ed" style="flex-basis:100%" onclick="beerShow()">🍺 Bira Satışı</button><button class="a" style="flex-basis:100%" onclick="regMe()">➕ Kayıt Ol (personel listesine ekle)</button>`;
   $('an').style.display=(ANONS&&M=='y')?'block':'none';
   $('an').textContent='📢 Anons modu açık: bu cihazın ekranı açık ve şarjda kalmalı. Molası dolan kişiye sesli seslenilir.';
 }
@@ -420,16 +420,20 @@ async function beerBatch(files){
       catch(e){msg(emsg(e));}
     },'Kaydet');
 }
-function beerTable(L){
+function beerTable(L,del){
   const tq=L.reduce((a,r)=>a+Number(r.qty||0),0),ta=L.reduce((a,r)=>a+Number(r.amt||0),0);
-  return '<div style="overflow:auto"><table class="xl xl2"><tr><th>#</th><th class="l">Ad Soyad</th><th>Miktar</th><th>Tutar</th><th></th></tr>'
-   +L.map((r,i)=>`<tr><td>${i+1}</td><td class="l"><b>${esc(nice(r.name))}</b>${r.range?'<br><span style="font-size:10px;color:#475569">'+esc(r.range)+'</span>':''}</td><td class="r g">${Number(r.qty).toLocaleString('tr-TR')}</td><td class="r">${tl2(r.amt)}</td><td><button class="a x" style="padding:4px 8px" data-k="${esc(r.key)}" onclick="beerDel(this.dataset.k)">Sil</button></td></tr>`).join('')
-   +`<tr class="tot"><td></td><td class="l">TOPLAM</td><td class="r">${tq.toLocaleString('tr-TR')}</td><td class="r">${tl2(ta)}</td><td></td></tr></table></div>`;
+  return '<div style="overflow:auto"><table class="xl xl2"><tr><th>#</th><th class="l">Ad Soyad</th><th>Miktar</th><th>Tutar</th>'+(del?'<th></th>':'')+'</tr>'
+   +L.map((r,i)=>`<tr><td>${i+1}</td><td class="l"><b>${esc(nice(r.name))}</b>${r.range?'<br><span style="font-size:10px;color:#475569">'+esc(r.range)+'</span>':''}</td><td class="r g">${Number(r.qty).toLocaleString('tr-TR')}</td><td class="r">${tl2(r.amt)}</td>${del?`<td><button class="a x" style="padding:4px 8px" data-k="${esc(r.key)}" onclick="beerDel(this.dataset.k)">Sil</button></td>`:''}</tr>`).join('')
+   +`<tr class="tot"><td></td><td class="l">TOPLAM</td><td class="r">${tq.toLocaleString('tr-TR')}</td><td class="r">${tl2(ta)}</td>${del?'<td></td>':''}</tr></table></div>`;
 }
+function beerShow(){google.script.run.withFailureHandler(e=>msg(emsg(e))).withSuccessHandler(r=>{
+  r=r.filter(inB).sort((a,b)=>b.qty-a.qty);
+  pop('🍺 Bira Satışı · '+BR[B],r.length?beerTable(r,false):'<span class="sub">Bu şube için henüz bira satışı girilmemiş.</span>',true);
+}).listBeerPub();}
 function beerDraw(){
   const el=$('beer');if(M!='y'){el.innerHTML='';return;}
   const L=BP.filter(inB).sort((a,b)=>b.qty-a.qty);
-  el.innerHTML=L.length?'<div class="sec" style="margin:16px 2px 6px">🍺 BİRA SATIŞI · '+BR[B]+' (wheel hariç)</div>'+beerTable(L)+'<button class="a ed" style="width:100%;margin-top:8px" onclick="beerXls()">⬇ Excel indir</button>':'';
+  el.innerHTML=L.length?'<div class="sec" style="margin:16px 2px 6px">🍺 BİRA SATIŞI · '+BR[B]+' (wheel hariç)</div>'+beerTable(L,true)+'<button class="a ed" style="width:100%;margin-top:8px" onclick="beerXls()">⬇ Excel indir</button>':'';
 }
 function beerDel(k){ask('Bu kayıt silinsin mi?',[],()=>google.script.run.withFailureHandler(e=>msg(emsg(e))).withSuccessHandler(rptLoad).delBeer(k,PIN),'Sil');}
 function beerXls(){
