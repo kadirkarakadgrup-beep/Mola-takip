@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="tr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Mola Takip</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,sans-serif;background:#0f172a;color:#f1f5f9;padding:12px;min-height:100vh}
+.top{display:flex;gap:8px;margin-bottom:10px}
+.tab{flex:1;padding:12px;border:0;border-radius:10px;background:#1e293b;color:#94a3b8;font-size:15px;font-weight:600}
+.tab.on{background:#2563eb;color:#fff}.tab.m.on{background:#7c3aed}
+#st{font-size:13px;color:#fbbf24;margin:0 0 8px}.dt{font-size:13px;color:#cbd5e1;font-weight:700;margin:0 2px 8px}
+.sec{grid-column:1/-1;font-size:12px;font-weight:700;letter-spacing:.08em;color:#94a3b8;margin:6px 2px 0}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px}
+.card{background:#1e293b;border-radius:14px;padding:10px;border:2px solid transparent;display:flex;flex-direction:column;align-items:center;justify-content:space-between;gap:6px;min-height:150px;text-align:center}
+.card.offc{opacity:.55}.card.on{border-color:#22c55e}.card.pz{border-color:#eab308}
+.nm{font-weight:800;font-size:16px;line-height:1.15}.sub{font-size:12px;color:#94a3b8}
+.tm{font-size:30px;font-weight:800;font-variant-numeric:tabular-nums;color:#4ade80;line-height:1}.card.pz .tm{color:#facc15}
+.card.late{border-color:#ef4444;animation:bl .8s infinite}.card.late .tm{color:#fff}
+@keyframes bl{0%,100%{background:#dc2626}50%{background:#450a0e}}
+body.alarm{animation:bg .8s infinite}@keyframes bg{0%,100%{background:#0f172a}50%{background:#5b0b0b}}
+button.a{border:0;border-radius:10px;padding:12px 14px;font-weight:700;font-size:14px;color:#fff;background:#16a34a}
+.btns{display:flex;flex-direction:column;gap:6px;width:100%}.btns button{width:100%}
+.btns small{display:block;font-size:12px;font-weight:600;opacity:.9}
+.k-yemek{background:#2563eb!important}.k-kahvalti,.k-aksam{background:#9333ea!important}
+button.a.end{background:#dc2626}button.a.x{background:#475569}button.a.off{background:#b45309}button.a.ed{background:#0e7490}
+.ib{display:flex;flex-wrap:wrap;gap:4px;width:100%}.ib button{flex:1 1 34px;padding:8px 0;font-size:16px;border:0;border-radius:8px;color:#fff;background:#475569}
+.bar{display:flex;gap:8px;margin:10px 0;flex-wrap:wrap}.bar button{flex:1}
+.chips{display:flex;gap:4px;flex-wrap:wrap;justify-content:center}
+.chip{padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700;background:#166534;color:#bbf7d0}
+.chip.cur{background:transparent;border:2px solid #facc15;color:#facc15;padding:0 6px}.chip.left{background:#334155;color:#e2e8f0}
+.fin{font-weight:800;color:#4ade80;padding:10px 0}
+.ov{position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;padding:20px;z-index:9}.ov[hidden]{display:none}
+.mb{background:#1e293b;border-radius:16px;padding:20px;width:100%;max-width:380px;max-height:90vh;overflow:auto}
+.mb h3{margin:0 0 12px;font-size:17px;white-space:pre-line}.mb label{display:block;font-size:13px;color:#94a3b8;margin:10px 0 4px}
+.mb input{width:100%;padding:12px;border-radius:10px;border:1px solid #475569;background:#0f172a;color:#fff;font-size:16px}
+.mbt{display:flex;gap:8px;margin-top:16px}.mbt button{flex:1}
+</style></head>
+<body>
+<div class="top" id="br"></div><div class="top" id="md"></div><div class="bar" id="tools"></div><div id="st"></div><div id="list"></div>
+<div class="ov" id="ov" hidden><div class="mb"><h3 id="mt"></h3><div id="mf"></div>
+<div class="mbt"><button class="a x" id="mc">İptal</button><button class="a" id="mo">Tamam</button></div></div></div>
+<script type="module">
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
+import { getFirestore, collection, query, where, onSnapshot, doc, getDoc } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
+import { getFunctions, httpsCallable } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-functions.js';
+import { getMessaging, getToken } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js';
+
+// ===== AYARLAR: Firebase konsolundan alıp yapıştırın =====
+const FB = { apiKey: 'AIzaSyD_Bl_RC8xzscXA3-GP8X2tdBi6tFhCs8E', authDomain: 'mola-takip-7fc53.firebaseapp.com', projectId: 'mola-takip-7fc53', messagingSenderId: '130287831940', appId: '1:130287831940:web:c3a804d90a0225231b2bd1' };
+const VAPID = 'BURAYA';   // Proje ayarları > Cloud Messaging > Web Push sertifikası (anahtar çifti)
+// functions/index.js içindeki CFG ile aynı olmalı
+const SEQ = { opt: [['mola', 'Çay Molası', 20], ['yemek', 'Öğlen Yemeği', 30], ['mola', 'Çay Molası', 20]], mavi: [['mola', 'Çay Molası', 20], ['yemek', 'Öğlen Yemeği', 40], ['mola', 'Çay Molası', 20]] };
+const EX = [['kahvalti', 'Kahvaltı Molası', 15, 8, 11], ['aksam', 'Akşam Yemeği', 15, 20, 24]], MAIN = [11, 20];
+const NM = { mola: 'Çay Molası', yemek: 'Öğlen Yemeği', kahvalti: 'Kahvaltı Molası', aksam: 'Akşam Yemeği' }, BR = { opt: 'Optimum', mavi: 'Mavi Bahçe' };
+
+const app = initializeApp(FB), db = getFirestore(app), auth = getAuth(app), fns = getFunctions(app, 'europe-west1');
+const $ = id => document.getElementById(id), p = n => String(n).padStart(2, '0');
+const esc = t => String(t == null ? '' : t).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+const hm = t => new Date(t).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Istanbul' });
+const call = async (n, d) => { try { return (await httpsCallable(fns, n)(d || {})).data; } catch (e) { throw new Error(e.message || 'Bağlantı sorunu'); } };
+let B = 'opt', M = 'g', S = [], OFF = 0, USER = null, unsub = null, ANONS = false, WL = null, ac = null; const alerted = {}, chk = {}, spoke = {};
+
+function ask(title, fields, cb, ok) {
+  $('mt').textContent = title;
+  $('mf').innerHTML = fields.map((f, i) => `<label>${f.l}</label><input id="f${i}" type="${f.t || 'text'}" value="${esc(f.v)}" autocomplete="off">`).join('');
+  $('mo').textContent = ok || 'Tamam'; $('mc').style.display = ''; $('ov').hidden = false;
+  if (fields.length) setTimeout(() => $('f0').focus(), 50);
+  $('mc').onclick = () => $('ov').hidden = true;
+  $('mo').onclick = () => { const v = fields.map((f, i) => $('f' + i).value); $('ov').hidden = true; cb(v); };
+}
+const msg = t => { ask(t, [], () => {}, 'Tamam'); $('mc').style.display = 'none'; };
+const act = (n, d) => call(n, d).catch(e => msg(e.message));
+
+// ===== Zaman / mola kuralları (sunucu da aynısını doğrular) =====
+const nowMs = () => Date.now() + OFF, ist = () => new Date(nowMs() + 10800000);
+const mdNow = () => ist().getUTCHours() * 60 + ist().getUTCMinutes(), dayKey = () => ist().toISOString().slice(0, 10).replace(/-/g, '');
+const norm = s => s.day === dayKey() ? { ...s, done: s.done || [] } : { ...s, done: [], active: null };
+const endOf = a => a.start + (a.pt || 0) + a.dur * 60000;
+const mainT = s => s.done.filter(x => x.k === 'mola' || x.k === 'yemek').reduce((a, x) => a + (x.m || 0), 0);
+const usedK = (s, k) => s.done.filter(x => x.k === k).reduce((a, x) => a + (x.m || 0), 0);
+const total = () => SEQ[B].reduce((a, q) => a + q[2], 0);
+function opts(s) {
+  const r = [], T = mainT(s), md = mdNow(); let b = 0;
+  if (md >= MAIN[0] * 60 && md < MAIN[1] * 60) for (const [k, n, d] of SEQ[B]) { b += d; if (T < b) { r.push({ k, n, d: b - T }); break; } }
+  for (const [k, n, d, f, t] of EX) { const l = d - usedK(s, k); if (md >= f * 60 && md < t * 60 && l > 0) r.push({ k, n, d: l }); }
+  return r;
+}
+
+// ===== Gerçek zamanlı liste =====
+function listen() {
+  if (unsub) unsub();
+  unsub = onSnapshot(query(collection(db, 'staff'), where('branch', '==', B)), sn => { S = sn.docs.map(d => ({ id: d.id, ...d.data() })); $('st').textContent = ''; draw(); }, e => $('st').textContent = '⚠ ' + e.message);
+}
+function head() {
+  $('br').innerHTML = Object.keys(BR).map(k => `<button class="tab ${k == B ? 'on' : ''}" data-a="br" data-v="${k}">${BR[k]}</button>`).join('');
+  $('md').innerHTML = `<button class="tab ${M == 'g' ? 'on' : ''}" data-a="mode" data-v="g">👤 Garson</button><button class="tab m ${M == 'y' ? 'on' : ''}" data-a="mode" data-v="y">🔑 Yönetici</button>`;
+  $('tools').innerHTML = M == 'y' ? `<button class="a" data-a="add">+ Personel Ekle</button><button class="a ed" data-a="push">🔔 Bildirimleri Aç</button><button class="a off" data-a="testpush">Test Bildirimi</button><button class="a an" style="background:#7c3aed" data-a="anons">${ANONS ? '📢 Anons: AÇIK' : '📢 Anons Modu'}</button><button class="a x" data-a="out">Çıkış</button>` : '';
+}
+function tile(s0) {
+  const s = norm(s0), a = s.active, T = mainT(s), left = Math.max(0, total() - T);
+  let chips = s.done.map(x => `<span class="chip">✓ ${NM[x.k] || x.k} ${hm(x.t)}–${hm(x.e || x.t + x.m * 60000)} (${x.m} dk)</span>`).join('');
+  if (a) chips += `<span class="chip cur">${a.n} ${a.dur} dk${a.paused ? ' · ⏸' : ''}</span><span class="chip cur">${hm(a.start)} çıktı${a.paused ? '' : ' · ' + hm(endOf(a)) + ' dönüş'}</span>`;
+  chips += `<span class="chip left">Kalan ${left} dk</span>`;
+  let btns = '';
+  if (M == 'g' && !a) { const o = opts(s); btns = o.length ? '<div class="btns">' + o.map(x => `<button class="a k-${x.k}" data-a="start" data-id="${s.id}" data-k="${x.k}"><b>${x.n}</b><small>${x.d} dk</small></button>`).join('') + '</div>' : (T >= total() || mdNow() >= MAIN[1] * 60 ? '<div class="fin">✅ Molalar bitti</div>' : '<span class="sub">Şu an mola saati değil</span>'); }
+  if (M == 'y') {
+    if (a) btns += `<div class="btns"><button class="a off" data-a="${a.paused ? 'resume' : 'pause'}" data-id="${s.id}">${a.paused ? '▶ Devam' : '⏸ Durdur'}</button><button class="a end" data-a="end" data-id="${s.id}">Molayı Bitir</button></div>`;
+    btns += `<div class="ib"><button data-a="edit" data-id="${s.id}" title="Düzenle">✏️</button><button data-a="off" data-id="${s.id}" data-v="${s.off ? 0 : 1}" title="İzinli">${s.off ? '✅' : '🚫'}</button><button data-a="reset" data-id="${s.id}" title="Molasını sıfırla">♻️</button><button data-a="del" data-id="${s.id}" title="Sil">🗑</button></div>`;
+  }
+  return `<div class="card ${a ? (a.paused ? 'pz' : 'on') : ''} ${s.off ? 'offc' : ''}" data-id="${s.id}"><div class="nm">${esc(s.name)}</div>${a ? '<div class="tm">--:--</div>' : ''}<div class="chips">${chips}</div>${btns}</div>`;
+}
+function draw() {
+  head();
+  const L = S.map(norm).filter(s => M == 'y' || !s.off);
+  const act1 = L.filter(s => s.active).sort((a, b) => a.active.start - b.active.start), rest = L.filter(s => !s.active && !s.off).sort((a, b) => a.name.localeCompare(b.name, 'tr')), offs = L.filter(s => !s.active && s.off);
+  let h = `<div class="dt">📅 ${ist().toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric', weekday: 'long', timeZone: 'UTC' })}</div><div class="grid">`;
+  if (act1.length) h += '<div class="sec">MOLADA</div>' + act1.map(tile).join('');
+  if (rest.length) h += (act1.length ? '<div class="sec">PERSONEL</div>' : '') + rest.map(tile).join('');
+  if (offs.length) h += '<div class="sec">İZİNLİ</div>' + offs.map(tile).join('');
+  $('list').innerHTML = L.length ? h + '</div>' : '<p class="sub">Bu şubede personel yok.</p>';
+  tick();
+}
+
+// ===== Tıklamalar =====
+const A = {
+  br: d => { B = d.v; listen(); },
+  mode: d => { if (d.v == 'y' && !USER) return login(); M = d.v; draw(); },
+  start: d => { const s = norm(S.find(x => x.id == d.id)), o = opts(s).find(x => x.k == d.k); ask(`${o.n} (${o.d} dk) başlatılsın mı?`, [], () => { prep(); act('startBreak', { id: d.id, k: d.k }); }, 'Başlat'); },
+  end: d => act('endBreak', { id: d.id }), pause: d => act('pauseBreak', { id: d.id }), resume: d => act('resumeBreak', { id: d.id }),
+  off: d => act('setOff', { id: d.id, off: d.v == 1 }),
+  reset: d => ask('Bu kişinin bugünkü tüm molaları sıfırlansın mı?', [], () => act('resetStaff', { id: d.id }), 'Sıfırla'),
+  del: d => ask(S.find(x => x.id == d.id).name + ' silinsin mi?', [], () => act('removeStaff', { id: d.id }), 'Sil'),
+  add: () => ask('Personel Ekle', [{ l: 'Personel adı' }, { l: 'E-posta (isteğe bağlı)', t: 'email' }, { l: 'Telefon (isteğe bağlı)', t: 'tel' }], v => v[0].trim() && act('addStaff', { name: v[0], branch: B, email: v[1], phone: v[2] }), 'Ekle'),
+  edit: async d => { const s = S.find(x => x.id == d.id), pr = (await getDoc(doc(db, 'staffPrivate', d.id))).data() || {}; ask('Personeli Düzenle', [{ l: 'Personel adı', v: s.name }, { l: 'E-posta', t: 'email', v: pr.email }, { l: 'Telefon', t: 'tel', v: pr.phone }], v => v[0].trim() && act('updateStaff', { id: d.id, name: v[0], email: v[1], phone: v[2] }), 'Kaydet'); },
+  out: () => signOut(auth), anons: async () => { ANONS = !ANONS; prep(); try { if (ANONS) WL = await navigator.wakeLock.request('screen'); else if (WL) { await WL.release(); WL = null; } } catch (e) {} draw(); },
+  testpush: () => act('testPush').then(() => msg('Test bildirimi gönderildi ✅')),
+  push: async () => {
+    try {
+      const reg = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+      if (await Notification.requestPermission() !== 'granted') return msg('Bildirim izni verilmedi. Tarayıcı ayarlarından izin verin.');
+      await call('saveFcmToken', { token: await getToken(getMessaging(app), { vapidKey: VAPID, serviceWorkerRegistration: reg }) });
+      msg('Bu cihaza bildirimler açıldı ✅');
+    } catch (e) { msg('Bildirim açılamadı: ' + e.message); }
+  }
+};
+document.addEventListener('click', e => { const b = e.target.closest('[data-a]'); if (b) A[b.dataset.a](b.dataset); });
+function login() {
+  ask('Yönetici girişi', [{ l: 'E-posta', t: 'email' }, { l: 'Şifre', t: 'password' }], v => signInWithEmailAndPassword(auth, v[0].trim(), v[1]).then(() => { M = 'y'; draw(); }).catch(() => msg('E-posta veya şifre yanlış')), 'Giriş');
+}
+onAuthStateChanged(auth, u => { USER = u; if (!u && M == 'y') M = 'g'; draw(); });
+
+// ===== Sayaç, yanıp sönme, sert sesli anons (yalnızca yönetici ekranı) =====
+const prep = () => { try { if (!ac) ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} };
+const nice = n => String(n || '').toLocaleLowerCase('tr').replace(/(^|\s)\S/g, c => c.toLocaleUpperCase('tr'));
+function siren() { try { if (!ac) return; for (let i = 0; i < 3; i++) { const o = ac.createOscillator(), g = ac.createGain(); o.type = 'square'; o.frequency.value = i % 2 ? 700 : 1100; g.gain.value = .35; o.connect(g); g.connect(ac.destination); o.start(ac.currentTime + i * .2); o.stop(ac.currentTime + i * .2 + .16); } } catch (e) {} }
+function say(t) { try { const v = speechSynthesis.getVoices().filter(x => /^tr/i.test(x.lang)), u = new SpeechSynthesisUtterance(t); u.lang = 'tr-TR'; u.voice = v.find(x => /tolga|cem|erkek|ahmet/i.test(x.name)) || v[0] || null; u.rate = 1.1; u.pitch = .55; speechSynthesis.speak(u); } catch (e) {} }
+function tick() {
+  let late = false;
+  document.querySelectorAll('.card[data-id]').forEach(el => {
+    const s0 = S.find(x => x.id == el.dataset.id), a = s0 && norm(s0).active; if (!a) return;
+    const r = endOf(a) - (a.paused ? a.pausedAt : nowMs()), ab = Math.abs(r), t = el.querySelector('.tm');
+    if (t) t.textContent = (a.paused ? '⏸ ' : '') + (r < 0 ? '+' : '') + p(ab / 60000 | 0) + ':' + p(ab / 1000 % 60 | 0);
+    const lt = !a.paused && r < 0; el.classList.toggle('late', lt);
+    if (!lt) return; late = true;
+    const key = s0.id + a.start + (a.pt || 0);
+    if (!alerted[key]) { alerted[key] = 1; document.title = '🔴 MOLA DOLDU: ' + s0.name; try { navigator.vibrate && navigator.vibrate([800, 300, 800, 300, 800]); } catch (e) {} }
+    if (M == 'y' && ANONS && (spoke[key] || 0) + 25000 < Date.now()) { spoke[key] = Date.now(); siren(); setTimeout(() => say(nice(s0.name) + ', molan bitti! Çabuk postana geç!'), 650); }
+    if (!chk[key] || Date.now() - chk[key] > 20000) { chk[key] = Date.now(); call('checkNow').catch(() => {}); }   // push'u anında tetikler
+  });
+  document.body.classList.toggle('alarm', late); if (!late) document.title = 'Mola Takip';
+}
+call('getTime').then(r => OFF = r.now - Date.now()).catch(() => {});
+listen(); setInterval(tick, 1000); setInterval(() => { if ($('ov').hidden) draw(); }, 30000);
+</script></body></html>
