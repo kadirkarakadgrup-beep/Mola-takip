@@ -296,6 +296,15 @@ const API = {
       s.off = !!off;
     });
   },
+  async selfRegister(branch, name, phone, email) {   // garson kendini kaydeder (şifresiz)
+    if (branch !== 'opt' && branch !== 'mavi') throw new Error('Şube geçersiz');
+    name = nice_(name);
+    if (name.length < 3) throw new Error('Ad soyad yazın');
+    if ((await allStaff_()).some(s => s.branch === branch && norm_(s.name) === norm_(name))) throw new Error('Bu isim bu şubede zaten kayıtlı');
+    const id = Math.random().toString(36).slice(2, 10);
+    await col('staff').doc(id).set(clean_({ id, branch, name, email: String(email || '').trim(), phone: phone_(phone), day: today_(), done: [], active: null, off: false }));
+    return name;
+  },
   async removeStaff(id, pin) {
     auth_(pin);
     const s = (await allStaff_()).find(x => x.id === id);
