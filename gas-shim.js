@@ -1,15 +1,14 @@
+
 (function(){
-// Mola Takip - Apps Script (Code.gs) mantığının Firebase Firestore'a taşınmış hali.
-// index.html'deki google.script.run çağrıları aynen çalışır.
+// Mola Takip - Firebase Firestore arka ucu. index.html'deki google.script.run çağrılarını karşılar.
 const FIREBASE_CONFIG = {
-  // Mevcut Mola-takip repondaki index.html içinden firebaseConfig değerlerini buraya kopyala:
   apiKey: 'AIzaSyD_Bl_RC8xzscXA3-GP8X2tdBi6tFhCs8E',
   authDomain: 'mola-takip-7fc53.firebaseapp.com',
   projectId: 'mola-takip-7fc53',
   appId: '1:130287831940:web:c3a804d90a0225231b2bd1'
 };
 const CFG = {
-  PIN: '1234',                          // Yönetici şifresi (değiştir!)
+  PIN: '1234',                          // Yönetici şifresi (DEĞİŞTİR!)
   NTFY_PREFIX: 'mola-DEGISTIR-123xyz',  // Telefonlardaki ntfy kodlarıyla aynı kalmalı (benzersiz yap)
   SEQ: {
     opt: [{ k: 'mola', n: 'Çay Molası', d: 20 }, { k: 'yemek', n: 'Öğlen Yemeği', d: 30 }, { k: 'mola', n: 'Çay Molası', d: 20 }],
@@ -100,7 +99,6 @@ async function allStaff_() {
   return q.docs.map(d => { const s = d.data(); s.id = d.id; if (s.day !== t) { s.day = t; s.done = []; s.active = null; } s.done = s.done || []; return s; });
 }
 const clean_ = s => JSON.parse(JSON.stringify(s));
-// Tek personel belgesini transaction ile güncelle (fn içinde hata fırlatılırsa hiçbir şey yazılmaz)
 async function upd_(id, fn) {
   return db.runTransaction(async tx => {
     const ref = col('staff').doc(id), snap = await tx.get(ref);
@@ -113,8 +111,14 @@ async function upd_(id, fn) {
     return s;
   });
 }
+// Şubesi kayıtlı olmayan eski raporların şubesini personel listesinden bulur
+async function reports_() {
+  const rs = (await col('reports').get()).docs.map(d => d.data()), st = await allStaff_();
+  rs.forEach(r => { if (!r.sube) { const s = st.find(x => norm_(x.name) === norm_(r.name)); if (s) r.sube = s.branch; } });
+  return rs;
+}
 
-// ---------- ntfy (tarayıcıdan doğrudan) ----------
+// ---------- ntfy ----------
 let TOK = null;
 async function token_() {
   if (TOK === null) { const d = await col('cfg').doc('ntfy').get(); TOK = d.exists ? String(d.data().token || '').trim() : ''; }
@@ -151,7 +155,7 @@ async function schedule_(id, start, text, delay) {
 }
 const due_ = (s, now) => { const a = s.active; return !!(a && !a.paused && !a.notified && now >= end_(a) && !(a.lastTry && now - a.lastTry < 60000)); };
 
-// ---------- API (google.script.run.<ad>) ----------
+// ---------- API ----------
 const API = {
   async getState(branch, pin) {
     const mgr = !!pin && checkPin_(pin), md = md_(), wd = wd_();
@@ -190,7 +194,7 @@ const API = {
     if (!r.ok) throw new Error(r.err);
     return 'ok';
   },
-  async sendMailTest() { throw new Error('Mail gönderimi bu sürümde yok (GitHub Pages sunucusuz çalışır). Bildirimler ntfy ile gelir.'); },
+  async sendMailTest() { throw new Error('Mail gönderimi bu sürümde yok. Bildirimler ntfy ile gelir.'); },
   async startBreak(id, k) {
     const s = await upd_(id, s => {
       if (s.off) throw new Error('Personel izinli');
@@ -224,7 +228,7 @@ const API = {
     });
     if (s.active && s.active.posting) await schedule_(s.id, s.active.start, msgOf_(s, s.active), String(Math.round(end_(s.active) / 1000)));
   },
-  async endBreak(id, pin) {   // garson kendi molasını şifresiz bitirir
+  async endBreak(id, pin) {
     let old = null, rec = null;
     await upd_(id, s => {
       const a = s.active;
@@ -236,8 +240,8 @@ const API = {
     });
     if (rec) {
       const ref = col('hist').doc(id), d = await ref.get(), rows = (d.exists ? d.data().rows : []) || [];
-      rows.push(rec);
-      await ref.set({ rows: rows.slice(-200).map(r => ({ a: r[0], k: r[1], m: r[2], e: r[3] })) });
+      rows.push({ a: rec[0], k: rec[1], m: rec[2], e: rec[3] });
+      await ref.set({ rows: rows.slice(-200) });
     }
     if (old) await cancelActive_(old);
   },
@@ -259,7 +263,7 @@ const API = {
     });
     await API.checkBreaks();
   },
-  async checkBreaks() {   // Sayfa açıkken 20 sn'de bir çağrılır; süresi dolan ama bildirimi gitmemiş molaları gönderir
+  async checkBreaks() {
     const now = Date.now();
     for (const s0 of await allStaff_()) {
       if (!due_(s0, now)) continue;
@@ -268,7 +272,7 @@ const API = {
       if (!a) continue;
       let ok = !!a.sched, err = a.err || '';
       if (!a.sched && !(a.posting && now - end_(a) < 120000)) {
-        const m = await post_(topicOf_('yonetici'), '⏰ Mola doldu', `${nice_(s0.name)} (${branchName_(s0.branch)}) - ${a.dur} dk ${a.n} süresi doldu!`);
+        const m = await post_(topicOf_('yonetici'), '⏰ Mola doldu', msgOf_(s0, a));
         ok = m.ok; err = m.err || '';
       }
       await upd_(s0.id, c => {
@@ -296,7 +300,7 @@ const API = {
       s.off = !!off;
     });
   },
-  async selfRegister(branch, name, phone, email) {   // garson kendini kaydeder (şifresiz)
+  async selfRegister(branch, name, phone, email) {
     if (branch !== 'opt' && branch !== 'mavi') throw new Error('Şube geçersiz');
     name = nice_(name);
     if (name.length < 3) throw new Error('Ad soyad yazın');
@@ -311,30 +315,50 @@ const API = {
     await col('staff').doc(id).delete(); await col('hist').doc(id).delete();
     if (s) await cancelActive_(s);
   },
+  // ---- Vardiya: Excel'den yapıştırma ----
+  // Desteklenen biçimler:
+  //  1) Her gün iki sütun (başlangıç, bitiş) + altında istasyon kodu satırı (isim sütunu boş)
+  //  2) Her gün tek sütun: 08:00-16:00
   async uploadShift(branch, text, pin) {
     auth_(pin);
-    const staff = (await allStaff_()).filter(s => s.branch === branch), got = {}, missing = [];
+    const staff = (await allStaff_()).filter(s => s.branch === branch), got = {}, codes = {}, missing = [];
+    const split = line => { let p = line.split(/\t|;|\|/); if (p.length < 2) p = line.split(','); return p.map(x => String(x == null ? '' : x).trim()); };
+    const tm = c => { const m = String(c).match(/^(\d{1,2})(?:[:.,](\d{2}))?$/); return m && +m[1] <= 24 ? { h: +m[1], i: +(m[2] || 0) } : null; };
+    const f2 = t => (t.h < 10 ? '0' : '') + t.h + ':' + (t.i < 10 ? '0' : '') + t.i;
+    let last = null;
     String(text || '').split(/\r?\n/).forEach(line => {
       if (!line.trim()) return;
-      let parts = line.split(/\t|;|\|/);
-      if (parts.length < 2) parts = line.split(',');
-      const name = String(parts[0] || '').trim();
-      if (!name) return;
-      const week = []; for (let i = 0; i < 7; i++) week.push(parseCell_(parts[i + 1]));
+      const parts = split(line), name = parts[0], cells = parts.slice(1);
+      if (!name) {   // isim boş = istasyon kodu satırı (T1, S4...)
+        if (last && cells.some(Boolean)) for (let i = 0; i < 7; i++) codes[last.id][i] = String(cells[last.pair ? i * 2 : i] || '').slice(0, 12);
+        return;
+      }
       const s = staff.find(x => norm_(x.name) === norm_(name));
-      if (s) got[s.id] = week; else if (week.some(Boolean)) missing.push(name);
+      const pair = cells.length >= 12 && cells.some(c => tm(c)) && !cells.some(c => /[-–—]/.test(c));
+      const week = [];
+      for (let i = 0; i < 7; i++) {
+        if (pair) {
+          const a = tm(cells[i * 2]), b = tm(cells[i * 2 + 1]);
+          week.push(a && b && !(a.h === 0 && a.i === 0) ? f2(a) + '-' + f2(b.h === 0 && b.i === 0 ? { h: 24, i: 0 } : b) : '');
+        } else week.push(parseCell_(cells[i]));
+      }
+      if (s) { got[s.id] = week; codes[s.id] = ['', '', '', '', '', '', '']; last = { id: s.id, pair: pair }; }
+      else { last = null; if (week.some(Boolean)) missing.push(name); }
     });
     const ids = Object.keys(got);
     if (!ids.length) throw new Error('Hiç isim eşleşmedi. Her satır: personel adı, sonra Pazartesi-Pazar vardiyaları olmalı.');
     const absent = [];
     for (const x of staff) {
-      await upd_(x.id, s => { if (got[s.id]) s.sh = got[s.id]; else { s.sh = ['', '', '', '', '', '', '']; absent.push(s.name); } });
+      await upd_(x.id, s => {
+        if (got[s.id]) { s.sh = got[s.id]; s.shc = codes[s.id]; }
+        else { s.sh = ['', '', '', '', '', '', '']; s.shc = ['', '', '', '', '', '', '']; absent.push(s.name); }
+      });
     }
     return { ok: ids.length, missing: missing, absent: absent };
   },
   async clearShift(branch, pin) {
     auth_(pin);
-    for (const x of (await allStaff_()).filter(s => s.branch === branch)) await upd_(x.id, s => { delete s.sh; });
+    for (const x of (await allStaff_()).filter(s => s.branch === branch)) await upd_(x.id, s => { delete s.sh; delete s.shc; });
   },
   async resetStaff(id, pin) {
     auth_(pin);
@@ -352,22 +376,22 @@ const API = {
       if (old) await cancelActive_(old);
     }
   },
-  // ---- Satış raporu (görselden okuma yok; ciro ve hesap sayısı elle girilir) ----
-  async readReport() { throw new Error('Görselden otomatik okuma bu sürümde yok (Google Drive OCR gerekir).'); },
+  // ---- Satış raporu: şubeye göre ayrı ----
   async saveReport(d, pin) {
     auth_(pin);
-    const name = String(d.name || '').trim(), ciro = Number(d.ciro), hesap = Number(d.hesap);
+    const name = String(d.name || '').trim(), ciro = Number(d.ciro), hesap = Number(d.hesap), sube = d.sube;
+    if (sube !== 'opt' && sube !== 'mavi') throw new Error('Şube geçersiz');
     if (!name || !(ciro > 0) || !(hesap > 0)) throw new Error('Ad, ciro ve hesap sayısı gerekli');
-    const range = String(d.range || '').trim(), key = norm_(name) + '_' + norm_(range), ort = Math.round(ciro / hesap * 100) / 100;
-    await col('reports').doc(key).set({ key, name, firma: String(d.firma || '').trim(), range, ciro, hesap, ort, t: Date.now() });
+    const range = String(d.range || '').trim(), key = sube + '_' + norm_(name) + '_' + norm_(range), ort = Math.round(ciro / hesap * 100) / 100;
+    await col('reports').doc(key).set({ key, sube, name, firma: String(d.firma || '').trim(), range, ciro, hesap, ort, t: Date.now() });
     return { ort: ort };
   },
   async listReports(pin) {
     auth_(pin);
-    return (await col('reports').get()).docs.map(d => d.data()).sort((a, b) => b.ort - a.ort);
+    return (await reports_()).sort((a, b) => b.ort - a.ort);
   },
-  async listReportsPub() {   // garson ekranı: şifresiz, salt okunur
-    return (await col('reports').get()).docs.map(d => { const r = d.data(); return { name: r.name, range: r.range, ciro: r.ciro, hesap: r.hesap, ort: r.ort }; }).sort((a, b) => b.ort - a.ort);
+  async listReportsPub() {
+    return (await reports_()).map(r => ({ name: r.name, sube: r.sube, range: r.range, ciro: r.ciro, hesap: r.hesap, ort: r.ort })).sort((a, b) => b.ort - a.ort);
   },
   async delReport(key, pin) { auth_(pin); await col('reports').doc(key).delete(); }
 };
