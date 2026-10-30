@@ -391,7 +391,23 @@ const API = {
   async listReportsPub() {
     return (await reports_()).map(r => ({ name: r.name, sube: r.sube, range: r.range, ciro: r.ciro, hesap: r.hesap, ort: r.ort })).sort((a, b) => b.ort - a.ort);
   },
-  async delReport(key, pin) { auth_(pin); await col('reports').doc(key).delete(); }
+  async delReport(key, pin) { auth_(pin); await col('reports').doc(key).delete(); },
+  // ---- Bira satışı (Personel Ürün Satış Raporu): garson başına miktar, wheel hariç ----
+  async saveBeer(rows, sube, range, pin) {
+    auth_(pin);
+    if (sube !== 'opt' && sube !== 'mavi') throw new Error('Şube geçersiz');
+    if (!Array.isArray(rows) || !rows.length) throw new Error('Kaydedilecek satır yok');
+    const rg = String(range || '').trim().slice(0, 40);
+    await Promise.all(rows.slice(0, 80).map(r => {
+      const name = String(r.name || '').trim(), qty = Number(r.qty);
+      if (!name || !isFinite(qty) || qty < 0) throw new Error('Geçersiz satır: ' + name);
+      const key = sube + '_' + norm_(name) + '_' + norm_(rg);
+      return col('beer').doc(key).set({ key, sube, name, range: rg, qty, amt: Number(r.amt) || 0, wheel: Number(r.wheel) || 0, t: Date.now() });
+    }));
+    return { n: Math.min(rows.length, 80) };
+  },
+  async listBeer(pin) { auth_(pin); return (await col('beer').get()).docs.map(d => d.data()).sort((a, b) => b.qty - a.qty); },
+  async delBeer(key, pin) { auth_(pin); await col('beer').doc(key).delete(); }
 };
 
 // ---------- google.script.run uyumluluğu ----------
