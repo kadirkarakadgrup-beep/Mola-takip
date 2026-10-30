@@ -534,14 +534,16 @@ window.beerBatch=async function(files){
   const ns=pages.map(p=>p.n).filter(x=>x!=null),r=beerPages(pages,(D&&D.staff)||[]);
   if(ns.some((n,i)=>i&&n!=ns[i-1]+1))r.warn.push('Sayfa numaraları ardışık değil, eksik sayfa olabilir');
   if(!r.rows.length){msg('Görsellerde garson toplamı okunamadı.\nSicil no (37-4), garson adı ve Miktar sütunu görünecek şekilde, rapor sayfalarının tamamını yükleyin.'+(r.warn.length?'\n\n'+r.warn.join('\n'):''));return;}
-  const sb=r.sube||B;
-  ask('🍺 Bira satışı · '+BR[sb]+'\n'+r.rows.length+' garson'+(r.grandOk?' · ✓ toplamlar rapordaki genel toplamla tuttu':'')+(r.warn.length?'\n⚠ '+r.warn.join('\n⚠ '):'')+'\nSatır: Ad;Miktar (wheel hariç)',
-    [{label:'Dönem (isteğe bağlı, örn. 26.10-1.11)'},{label:'Satırlar',type:'textarea',val:r.rows.map(x=>x.name+';'+x.qty).join('\n')}],async v=>{
-      const rows=[],fail=[];
-      v[1].split(/\r?\n/).forEach(ln=>{if(!ln.trim())return;const p=ln.split(';'),d={name:(p[0]||'').trim(),qty:num(p[1]),amt:0,wheel:0};if(d.name&&d.name!='?'&&isFinite(d.qty)&&d.qty>=0)rows.push(d);else fail.push(ln);});
-      try{const o=await gs('saveBeer',rows,sb,v[0].trim(),PIN);msg(o.n+' garsonun bira miktarı kaydedildi ✅'+(fail.length?'\n\nAtlanan satırlar:\n'+fail.join('\n'):''));rptLoad();}catch(e){msg(emsg(e));}
-    },'Kaydet');
+  beerForm(r.rows.map(x=>x.name+';'+x.qty).join('\n'),r.sube||B,'🍺 Bira satışı · '+BR[r.sube||B]+'\n'+r.rows.length+' garson'+(r.grandOk?' · ✓ toplamlar rapordaki genel toplamla tuttu':'')+(r.warn.length?'\n⚠ '+r.warn.join('\n⚠ '):'')+'\nSatır: Ad;Miktar (wheel hariç)');
 };
+window.beerForm=function(lines,sb,head){
+  ask(head,[{label:'Dönem (isteğe bağlı, örn. 1.10-30.10.2026)'},{label:'Satırlar (Ad;Miktar)',type:'textarea',val:lines}],async v=>{
+    const rows=[],fail=[];
+    v[1].split(/\r?\n/).forEach(ln=>{if(!ln.trim())return;const p=ln.split(';'),d={name:(p[0]||'').trim(),qty:num(p[1]),amt:0,wheel:0};if(d.name&&d.name!='?'&&isFinite(d.qty)&&d.qty>=0)rows.push(d);else fail.push(ln);});
+    try{const o=await gs('saveBeer',rows,sb,v[0].trim(),PIN);msg(o.n+' garsonun bira miktarı kaydedildi ✅\n'+BR[sb]+(fail.length?'\n\nAtlanan satırlar:\n'+fail.join('\n'):''));rptLoad();}catch(e){msg(emsg(e));}
+  },'Kaydet');
+};
+window.beerManual=function(){beerForm('',B,'🍺 Bira satışını elle gir · '+BR[B]+'\nSatır: Ad;Miktar (wheel hariç). Şube sekmesinin doğru olduğundan emin ol.');};
 window.beerTable=function(L,del){
   const tq=L.reduce((a,r)=>a+Number(r.qty||0),0);
   return '<div style="overflow:auto"><table class="xl xl2"><tr><th>#</th><th class="l">Ad Soyad</th><th>Miktar</th>'+(del?'<th></th>':'')+'</tr>'
@@ -553,18 +555,32 @@ const meK=()=>'mola_me_'+B,getMe=()=>{try{return localStorage.getItem(meK())||''
 window.pickMe=id=>{try{id?localStorage.setItem(meK(),id):localStorage.removeItem(meK());}catch(e){}load();};
 window.myCode=()=>google.script.run.withFailureHandler(e=>msg(emsg(e))).withSuccessHandler(c=>msg('Senin bildirim kodun:\n\n'+c+'\n\nTelefonuna ntfy uygulamasını kur, "+" ile bu kodu ekle. Molan bitince bildirim sana düşer.')).getTopic(getMe(),'');
 const od=window.draw,oh=window.head;
+const ini=n=>nice(n).split(' ').filter(Boolean).slice(0,2).map(w=>w[0]).join('');
+window.pkFilter=v=>{const q=nrm(v);document.querySelectorAll('.pkc').forEach(b=>{b.style.display=(!q||b.dataset.n.indexOf(q)>=0)?'':'none';});};
 window.draw=function(){
   if(M!='g'){od();return;}
   const me=getMe();
   if(me&&D.staff.some(s=>s.id==me)){const all=D.staff;D.staff=all.filter(s=>s.id==me);try{od();}finally{D.staff=all;}return;}
   head();
-  $('list').innerHTML='<div class="dt">👤 Kendi adını seç</div><div class="grid">'+D.staff.filter(s=>!s.off).map(s=>`<button class="a" style="min-height:58px;font-size:16px" onclick="pickMe('${s.id}')">${esc(s.name)}</button>`).join('')+'</div>'+(D.staff.length?'':'<p class="sub">Listede kimse yok. Yukarıdaki Kayıt Ol ile kendini ekle.</p>');
+  const L=D.staff.filter(s=>!s.off).sort((a,b)=>a.name.localeCompare(b.name,'tr')),sig=L.map(s=>s.id).join();
+  if($('pks')&&window.__pkSig===sig)return;   // 5 sn'lik yenilemede arama kutusu silinmesin
+  window.__pkSig=sig;
+  $('list').innerHTML='<div class="pk"><div class="pkh">👤 Kim olduğunu seç<span>'+L.length+' kişi</span></div><input id="pks" class="pks" placeholder="🔎 Adını yaz…" oninput="pkFilter(this.value)" autocomplete="off">'
+    +'<div class="pkg">'+L.map(s=>`<button class="pkc" data-n="${esc(nrm(s.name))}" onclick="pickMe('${s.id}')"><b>${esc(ini(s.name))}</b><span>${esc(nice(s.name))}</span></button>`).join('')+'</div>'
+    +(L.length?'':'<p class="sub">Listede kimse yok.</p>')+'<button class="pill" style="margin-top:14px" onclick="regMe()">➕ Listede yoksan kayıt ol</button></div>';
 };
-window.head=function(){oh();if(M=='g'&&getMe())$('tools').insertAdjacentHTML('beforeend','<button class="a an" onclick="myCode()">🔔 Bildirim kodum</button><button class="a x" onclick="pickMe(\'\')">↩ Kişiyi değiştir</button>');};
+window.head=function(){
+  oh();
+  if(M=='g'){
+    const me=getMe();
+    $('tools').innerHTML='<div class="tiles"><button onclick="rptShow()"><i>📊</i><span>Ciro<br>Ortalama</span></button><button onclick="shiftShow()"><i>🗓️</i><span>Haftalık<br>Vardiya</span></button><button onclick="beerShow()"><i>🍺</i><span>Bira<br>Satışı</span></button></div>'
+      +(me?'<div class="chipsrow"><button class="pill" onclick="myCode()">🔔 Bildirim kodum</button><button class="pill" onclick="pickMe(\'\')">↩ Kişiyi değiştir</button></div>':'');
+  }else if(M=='y')$('tools').insertAdjacentHTML('beforeend','<button class="a ed" onclick="beerManual()">✍ Elle Bira</button>');
+};
 // ----- Görünüm + uygulama simgesi -----
 const sty=document.createElement('style');
-sty.textContent='#tools .a{flex:1 1 44%;min-height:54px;border-radius:16px;font-size:15px}.card{border-radius:20px}#list .btns .a{min-height:56px;font-size:16px}';
+sty.textContent='.tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;width:100%}.tiles button{border:1px solid rgba(148,163,184,.18);border-radius:18px;padding:14px 4px;background:linear-gradient(160deg,#1f2b42,#162033);color:#e2e8f0;font-weight:700;font-size:13px;line-height:1.25;box-shadow:0 6px 16px rgba(0,0,0,.28);display:flex;flex-direction:column;align-items:center;gap:6px}.tiles i{font-style:normal;font-size:26px}.tiles button:active{transform:scale(.97)}.pill{border:1px solid rgba(148,163,184,.25);background:rgba(148,163,184,.1);color:#e2e8f0;border-radius:999px;padding:10px 16px;font-weight:600;font-size:13px}.chipsrow{display:flex;gap:8px;flex-wrap:wrap;width:100%}.pkh{font-weight:800;font-size:16px;display:flex;justify-content:space-between;align-items:center;margin:4px 2px}.pkh span{font-size:12px;color:#94a3b8;font-weight:600}.pks{width:100%;padding:13px 14px;border-radius:14px;border:1px solid #334155;background:#0f172a;color:#fff;font-size:16px;margin:8px 0 12px}.pkg{display:grid;grid-template-columns:1fr 1fr;gap:10px}.pkc{display:flex;align-items:center;gap:10px;text-align:left;padding:10px;border-radius:16px;border:1px solid rgba(148,163,184,.15);background:linear-gradient(160deg,#1f2b42,#162033);color:#f1f5f9;font-size:14px;font-weight:600;box-shadow:0 4px 12px rgba(0,0,0,.25)}.pkc b{flex:none;width:38px;height:38px;border-radius:50%;display:grid;place-items:center;background:linear-gradient(135deg,#6366f1,#8b5cf6);font-size:14px}.pkc span{line-height:1.2;word-break:break-word}.card{border-radius:20px}#list .btns .a{min-height:56px;font-size:16px}';
 document.head.appendChild(sty);
-var hs = document.querySelector('.hs'); if (hs) hs.textContent += ' · v4';   // yeni dosyanın yüklendiğini göstermek için
+var hs = document.querySelector('.hs'); if (hs) hs.textContent += ' · v5';   // yeni dosyanın yüklendiğini göstermek için
 });
 })();
