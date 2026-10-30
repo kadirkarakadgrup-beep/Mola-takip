@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html><head><base target="_top"><meta charset="utf-8">
+<meta name="theme-color" content="#1e1b4b">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
 *{box-sizing:border-box}
@@ -50,8 +51,32 @@ details.tl summary{font-weight:700;cursor:pointer;color:#cbd5e1}details.tl .bar{
 .mb label{display:block;font-size:13px;color:#94a3b8;margin:10px 0 4px}
 .mb input,.mb textarea{font-family:inherit;width:100%;padding:12px;border-radius:10px;border:1px solid #475569;background:#0f172a;color:#fff;font-size:16px}
 .mbt{display:flex;gap:8px;margin-top:16px}.mbt button{flex:1}
+/* ===== Happy Moon's görünümü ===== */
+body{background:radial-gradient(120% 60% at 50% 0,#27235f 0,#0f172a 55%) fixed;padding:14px}
+.hd{display:flex;align-items:center;gap:14px;padding:14px 16px;margin-bottom:14px;border-radius:20px;background:linear-gradient(135deg,#1e3a8a 0,#4c1d95 100%);border:1px solid rgba(255,255,255,.1);box-shadow:0 10px 28px rgba(0,0,0,.4)}
+.hd svg{flex:none;filter:drop-shadow(0 2px 8px rgba(251,191,36,.45))}
+.hn{font-size:20px;font-weight:800;color:#fff;letter-spacing:.2px;line-height:1.15}
+.hs{font-size:11px;font-weight:700;color:#fde68a;letter-spacing:.18em;text-transform:uppercase;margin-top:3px}
+.top{background:#172033;padding:4px;border-radius:16px;border:1px solid rgba(148,163,184,.12)}
+.tab{background:transparent;color:#94a3b8;border-radius:12px;transition:background .15s,color .15s}
+.tab.on{background:linear-gradient(135deg,#3b82f6,#2563eb);color:#fff;box-shadow:0 4px 12px rgba(37,99,235,.45)}
+.tab.m.on{background:linear-gradient(135deg,#8b5cf6,#6d28d9);box-shadow:0 4px 12px rgba(124,58,237,.45)}
+.dt{display:inline-block;background:rgba(148,163,184,.12);padding:6px 12px;border-radius:20px;margin:0 0 10px}
+.grid{gap:10px}
+.card{background:linear-gradient(160deg,#1f2b42,#162033);border:2px solid rgba(148,163,184,.12);border-radius:18px;box-shadow:0 6px 16px rgba(0,0,0,.28)}
+.nm{font-size:17px;letter-spacing:.1px}
+.tm{text-shadow:0 0 18px rgba(74,222,128,.45)}
+button.a,a.a{border-radius:12px;box-shadow:inset 0 1px 0 rgba(255,255,255,.22),0 3px 8px rgba(0,0,0,.3);letter-spacing:.2px;transition:transform .1s,filter .1s}
+button.a:active,a.a:active{transform:scale(.97);filter:brightness(.92)}
+.ib button{border-radius:10px;box-shadow:inset 0 1px 0 rgba(255,255,255,.15)}
+details.tl{border-radius:14px;border:1px solid rgba(148,163,184,.12)}
+.chip{box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)}
+.ov{backdrop-filter:blur(4px)}
+.mb{border-radius:22px;border:1px solid rgba(148,163,184,.15);box-shadow:0 20px 50px rgba(0,0,0,.5)}
+.mb input,.mb textarea{border-radius:12px}
 </style></head>
 <body>
+<header class="hd"><svg viewBox="0 0 64 64" width="54" height="54" aria-label="Happy Moon's"><defs><linearGradient id="mg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fef3c7"/><stop offset="1" stop-color="#f59e0b"/></linearGradient><mask id="mk"><rect width="64" height="64" fill="#fff"/><circle cx="41" cy="27" r="20" fill="#000"/></mask></defs><circle cx="30" cy="34" r="23" fill="url(#mg)" mask="url(#mk)"/><circle cx="17" cy="31" r="1.7" fill="#7c2d12"/><path d="M13.5 38.5q3.5 5 8 3.2" fill="none" stroke="#7c2d12" stroke-width="2" stroke-linecap="round"/><path d="M48 9l1.8 4.2L54 15l-4.2 1.8L48 21l-1.8-4.2L42 15l4.2-1.8z" fill="#fde68a"/><path d="M53 36l1.2 2.8 2.8 1.2-2.8 1.2L53 44l-1.2-2.8L49 40l2.8-1.2z" fill="#fde68a" opacity=".85"/></svg><div><div class="hn">İzmir Happy Moon's</div><div class="hs">Mola Takip</div></div></header>
 <div class="top" id="br"></div><div class="top" id="md"></div><div id="an"></div>
 <div class="bar" id="tools"></div><div id="st"></div><div id="list"></div><div id="rpt"></div><input type="file" id="rf" accept="image/*" hidden>
 <div class="ov" id="ov" hidden><div class="mb"><h3 id="mt"></h3><div id="mf"></div>
@@ -105,7 +130,7 @@ function head(){
   $('br').innerHTML=Object.keys(BR).map(k=>`<button class="tab ${k==B?'on':''}" onclick="B='${k}';load()">${BR[k]}</button>`).join('');
   $('md').innerHTML=`<button class="tab ${M=='g'?'on':''}" onclick="setM('g')">👤 Garson</button><button class="tab m ${M=='y'?'on':''}" onclick="setM('y')">🔑 Yönetici</button>`;
   $('tools').innerHTML=M=='y'
-    ?`<button class="a" onclick="add()">+ Personel Ekle</button><button class="a x" onclick="reset()">Günü Sıfırla</button><button class="a ed" onclick="shiftUp()">📅 Vardiya Yükle</button><button class="a ed" onclick="rptPick()">📷 Satış Raporu</button>
+    ?`<button class="a" onclick="add()">+ Personel Ekle</button><button class="a x" onclick="reset()">Günü Sıfırla</button><button class="a ed" onclick="shiftUp()">📅 Vardiya Yükle</button><button class="a ed" onclick="rptPick()">📊 Ciro Girişi</button>
       <button class="a an" onclick="anons()">${ANONS?'📢 Anons Modu: AÇIK (kapat)':'📢 Anons Modu'}</button>
       <details class="tl" style="width:100%" ${TO?'open':''} ontoggle="TO=this.open"><summary>⚙ Araçlar</summary><div class="bar">
         <button class="a ed" onclick="code('yonetici','Yönetici')">📲 Yönetici Kodu</button>
@@ -113,7 +138,7 @@ function head(){
         <button class="a off" onclick="mailTest()">✉ Mail Testi</button>
         <button class="a ed" onclick="tok()">🔑 Ntfy Token</button>
         <button class="a ed" onclick="voiceTest()">🔊 Anons Testi</button><button class="a off" onclick="shiftClr()">🗑 Vardiyayı Temizle</button></div></details>`
-    :'';
+    :`<button class="a ed" onclick="rptShow()">📊 Ciro Ortalama</button><button class="a ed" onclick="shiftShow()">🕗 Vardiya</button>`;
   $('an').style.display=(ANONS&&M=='y')?'block':'none';
   $('an').textContent='📢 Anons modu açık: bu cihazın ekranı açık ve şarjda kalmalı. Molası dolan kişiye sesli seslenilir.';
 }
@@ -145,6 +170,7 @@ function tile(s){
     btns=!(s.opts||[]).length?(s.bitti?'<div class="fin">✅ Molalar bitti</div>':'<span class="sub">Şu an mola saati değil</span>')
       :'<div class="btns">'+s.opts.map(o=>`<button class="a k-${o.k}" onclick="startB('${s.id}','${o.k}')"><b>${esc(o.n)}</b><small>${o.d} dk${o.d<o.full?' (devam)':''}</small></button>`).join('')+'</div>';
   }
+  if(M=='g'&&a)btns=`<div class="btns"><button class="a end" onclick="endBG('${s.id}')">Molayı Bitir</button></div>`;
   if(M=='y'){
     if(a){
       if(s.phone){
@@ -193,6 +219,17 @@ function startB(id,k){
   ask(o.n+' ('+o.d+' dk) başlatılsın mı?',[],()=>{perm(true);run().startBreak(id,k);},'Başlat');
 }
 function endB(id){run().endBreak(id,PIN);}
+function endBG(id){ask('Molan bitsin mi?',[],()=>run().endBreak(id,''),'Evet, bitir');}
+function pop(t,h){msg(t);$('mf').innerHTML=h;}
+function rptShow(){google.script.run.withFailureHandler(e=>msg(emsg(e))).withSuccessHandler(r=>{
+  pop('📊 Ciro Ortalama',r.length?r.map((x,i)=>`<div style="padding:8px 0;border-top:1px solid #334155"><b>${i+1}. ${esc(nice(x.name))}</b><br><span class="sub">${esc(x.range||'')}</span><br>Ciro: ${tl2(x.ciro)} TL · Hesap: ${x.hesap}<br><b style="color:#4ade80">Ortalama: ${tl2(x.ort)} TL</b></div>`).join(''):'<span class="sub">Henüz rapor girilmemiş.</span>');
+}).listReportsPub();}
+function shiftShow(){
+  const days=['Pzt','Sal','Çar','Per','Cum','Cmt','Paz'],td=(new Date().getDay()+6)%7,st=((D&&D.staff)||[]).filter(s=>!s.off);
+  if(!st.some(s=>s.sh)){msg('Vardiya henüz yüklenmedi.');return;}
+  const h=c=>c?c.replace(/:00/g,'').replace('-','–'):'–',hl=i=>i==td?'background:rgba(74,222,128,.15);':'';
+  pop('🕗 Haftalık Vardiya · '+BR[B],'<div style="overflow:auto"><table style="border-collapse:collapse;font-size:12px;width:100%"><tr><th></th>'+days.map((d,i)=>`<th style="padding:5px 3px;${hl(i)}">${d}</th>`).join('')+'</tr>'+st.map(s=>`<tr style="border-top:1px solid #334155"><td style="padding:6px 4px;font-weight:700;white-space:nowrap">${esc(nice(s.name))}</td>`+days.map((d,i)=>`<td style="padding:6px 3px;text-align:center;white-space:nowrap;${hl(i)}">${h(s.sh&&s.sh[i])}</td>`).join('')+'</tr>').join('')+'</table></div>');
+}
 function pauseB(id){run().pauseBreak(id,PIN);}
 function resumeB(id){run().resumeBreak(id,PIN);}
 function resend(id){run().resendNotify(id,PIN);}
@@ -233,7 +270,7 @@ function rptDraw(){
   el.innerHTML=RP.length?'<div class="sec" style="margin:16px 2px 6px">📊 SATIŞ ORTALAMALARI (hesap başına)</div>'+RP.map((r,i)=>`<div class="card" style="min-height:0;align-items:stretch;text-align:left;margin-bottom:6px"><b>${i+1}. ${esc(nice(r.name))}</b><span class="sub">${esc(r.firma||'')} · ${esc(r.range||'')}</span><span>Ciro: <b>${tl2(r.ciro)} TL</b> · Hesap: <b>${r.hesap}</b></span><span style="color:#4ade80;font-weight:800;font-size:17px">Ortalama: ${tl2(r.ort)} TL</span><button class="a x" data-k="${esc(r.key)}" onclick="rptDel(this.dataset.k)">Sil</button></div>`).join(''):'';
 }
 function rptDel(k){ask('Bu kayıt silinsin mi?',[],()=>google.script.run.withFailureHandler(e=>msg(emsg(e))).withSuccessHandler(rptLoad).delReport(k,PIN),'Sil');}
-function rptPick(){$('rf').value='';$('rf').click();}
+function rptPick(){rptConfirm({name:'',ciro:'',hesap:'',range:'',firma:''});}
 function shrink(f){return new Promise((ok,no)=>{const im=new Image(),u=URL.createObjectURL(f);im.onload=()=>{const w=Math.min(1600,im.width),c=document.createElement('canvas');c.width=w;c.height=Math.round(im.height*w/im.width);c.getContext('2d').drawImage(im,0,0,c.width,c.height);URL.revokeObjectURL(u);ok(c.toDataURL('image/jpeg',.9).split(',')[1]);};im.onerror=no;im.src=u;});}
 $('rf').addEventListener('change',async e=>{
   const f=e.target.files[0];if(!f)return;msg('Rapor okunuyor, birkaç saniye bekleyin…');
@@ -241,7 +278,7 @@ $('rf').addEventListener('change',async e=>{
 });
 function rptConfirm(r){
   const f=n=>(n===''||n==null)?'':tl2(n);
-  ask((r.raw?'⚠ Bazı değerler okunamadı, elle tamamlayın.\n':'Okunan değerleri kontrol edin.\n')+(r.rep?'Rapordaki ortalama hesap tutarı: '+f(r.rep)+' TL\n':'')+(r.raw?'\nOkunan metin: '+r.raw:''),
+  ask((r.raw?'⚠ Bazı değerler okunamadı, elle tamamlayın.\n':'Bilgileri girin (ciro ve hesap sayısı).\n')+(r.rep?'Rapordaki ortalama hesap tutarı: '+f(r.rep)+' TL\n':'')+(r.raw?'\nOkunan metin: '+r.raw:''),
     [{label:'Ad Soyad',val:nice(r.name)},{label:'Ciro (Ödemeler Toplamı)',val:f(r.ciro)},{label:'Hesap Sayısı',val:r.hesap===''?'':String(r.hesap)},{label:'Dönem',val:r.range},{label:'Firma',val:r.firma}],
     v=>{const d={name:v[0],ciro:num(v[1]),hesap:num(v[2]),range:v[3],firma:v[4]};
       google.script.run.withFailureHandler(e=>msg(emsg(e))).withSuccessHandler(o=>{msg(nice(d.name)+'\nCiro: '+tl2(d.ciro)+' TL\nHesap: '+d.hesap+'\nOrtalama: '+tl2(o.ort)+' TL');rptLoad();}).saveReport(d,PIN);},'Kaydet');
