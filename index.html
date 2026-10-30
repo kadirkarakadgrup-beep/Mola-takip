@@ -4,6 +4,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Mola Takip</title>
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
 *{box-sizing:border-box}
 body{margin:0;font-family:system-ui,sans-serif;background:radial-gradient(120% 60% at 50% 0,#27235f 0,#0f172a 55%) fixed;color:#f1f5f9;padding:14px;min-height:100vh}
@@ -64,6 +65,8 @@ details.tl summary{font-weight:700;cursor:pointer;color:#cbd5e1}details.tl .bar{
 .xl th,.xl td{border:1px solid #000;padding:5px 4px;text-align:center;white-space:nowrap}
 .xl .nmc{position:sticky;left:0;background:#fff;text-align:left;font-weight:800;padding:6px;z-index:1}
 .xl th{background:#fff;font-size:11px}.xl .dn{color:#1d4ed8;text-decoration:underline}
+.xl2 th{background:#217346;color:#fff}.xl2 .l{text-align:left}.xl2 td.r{text-align:right}.xl2 td.g{color:#166534;font-weight:800}
+.xl2 tr:nth-child(even) td{background:#f1f5f9}.xl2 tr.tot td{background:#e2e8f0;font-weight:800}
 .xl .td{background:#bbf7d0!important}
 .xl td.c{font-weight:700;font-size:12px}.xl td.c small{display:block;font-weight:700;font-size:11px;text-decoration:underline}
 .xl td.tdy{outline:3px solid #16a34a;outline-offset:-3px}
@@ -257,17 +260,34 @@ function shiftShow(){
 
 /* ===== Satış raporu (şubeye göre ayrı) ===== */
 const inB=r=>r.sube==B;
+let RPV=[];
+function rptTable(L,del){
+  const tc=L.reduce((a,r)=>a+Number(r.ciro||0),0),th=L.reduce((a,r)=>a+Number(r.hesap||0),0);
+  return '<div style="overflow:auto"><table class="xl xl2"><tr><th>#</th><th class="l">Ad Soyad</th><th>Dönem</th><th>Ciro (TL)</th><th>Hesap</th><th>Ortalama (TL)</th>'+(del?'<th></th>':'')+'</tr>'
+   +L.map((r,i)=>`<tr><td>${i+1}</td><td class="l"><b>${esc(nice(r.name))}</b></td><td>${esc(r.range||'')}</td><td class="r">${tl2(r.ciro)}</td><td>${r.hesap}</td><td class="r g">${tl2(r.ort)}</td>${del?`<td><button class="a x" style="padding:4px 8px" data-k="${esc(r.key)}" onclick="rptDel(this.dataset.k)">Sil</button></td>`:''}</tr>`).join('')
+   +`<tr class="tot"><td></td><td class="l">TOPLAM</td><td></td><td class="r">${tl2(tc)}</td><td>${th}</td><td class="r">${th?tl2(tc/th):'-'}</td>${del?'<td></td>':''}</tr></table></div>`;
+}
+function rptXls(L){
+  if(!L||!L.length){msg('İndirilecek kayıt yok.');return;}
+  const tc=L.reduce((a,r)=>a+Number(r.ciro||0),0),th=L.reduce((a,r)=>a+Number(r.hesap||0),0);
+  const rows=[['#','Ad Soyad','Dönem','Ciro (TL)','Hesap Sayısı','Ortalama (TL)']].concat(L.map((r,i)=>[i+1,nice(r.name),r.range||'',Number(r.ciro),Number(r.hesap),Number(r.ort)]));
+  rows.push(['','TOPLAM','',tc,th,th?Math.round(tc/th*100)/100:0]);
+  const fn='Ciro_Ortalama_'+BR[B].replace(/\s/g,'_')+'_'+new Date().toISOString().slice(0,10);
+  try{if(typeof XLSX!=='undefined'){const ws=XLSX.utils.aoa_to_sheet(rows);ws['!cols']=[{wch:4},{wch:24},{wch:22},{wch:14},{wch:12},{wch:14}];const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,BR[B]);XLSX.writeFile(wb,fn+'.xlsx');return;}}catch(e){}
+  const csv='\ufeff'+rows.map(r=>r.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(';')).join('\r\n');
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download=fn+'.csv';document.body.appendChild(a);a.click();a.remove();
+}
 function rptShow(){google.script.run.withFailureHandler(e=>msg(emsg(e))).withSuccessHandler(r=>{
-  r=r.filter(inB);
-  pop('📊 Ciro Ortalama · '+BR[B],r.length?r.map((x,i)=>`<div style="padding:8px 0;border-top:1px solid #334155"><b>${i+1}. ${esc(nice(x.name))}</b><br><span class="sub">${esc(x.range||'')}</span><br>Ciro: ${tl2(x.ciro)} TL · Hesap: ${x.hesap}<br><b style="color:#4ade80">Ortalama: ${tl2(x.ort)} TL</b></div>`).join(''):'<span class="sub">Bu şube için henüz rapor girilmemiş.</span>');
+  r=r.filter(inB);RPV=r;
+  pop('📊 Ciro Ortalama · '+BR[B],r.length?rptTable(r,false)+'<button class="a ed" style="width:100%;margin-top:10px" onclick="rptXls(RPV)">⬇ Excel indir</button>':'<span class="sub">Bu şube için henüz rapor girilmemiş.</span>',true);
 }).listReportsPub();}
 function rptLoad(){if(M!='y')return;google.script.run.withFailureHandler(()=>{}).withSuccessHandler(r=>{RP=r;rptDraw();}).listReports(PIN);}
 function rptDraw(){
   const el=$('rpt'),sm=$('sum');if(M!='y'){el.innerHTML='';sm.innerHTML='';return;}
   const L=RP.filter(inB);
   const tc=L.reduce((a,r)=>a+Number(r.ciro||0),0),th=L.reduce((a,r)=>a+Number(r.hesap||0),0);
-  sm.innerHTML=L.length?`<div class="card" style="min-height:0;margin:0 0 12px;gap:8px;border-color:#6366f1"><div class="sec" style="margin:0">📊 ${BR[B].toUpperCase()} · SATIŞ ÖZETİ (${L.length} kişi)</div><div style="display:flex;gap:8px;width:100%;flex-wrap:wrap"><div style="flex:1 1 120px;background:#0f172a;border-radius:12px;padding:8px"><div class="sub">Toplam Ciro</div><b style="font-size:17px">${tl2(tc)} TL</b></div><div style="flex:1 1 90px;background:#0f172a;border-radius:12px;padding:8px"><div class="sub">Hesap Sayısı</div><b style="font-size:17px">${th}</b></div><div style="flex:1 1 120px;background:#0f172a;border-radius:12px;padding:8px"><div class="sub">Ortalama</div><b style="font-size:17px;color:#4ade80">${th?tl2(tc/th):'-'} TL</b></div></div></div>`:'';
-  el.innerHTML=L.length?'<div class="sec" style="margin:16px 2px 6px">📊 SATIŞ ORTALAMALARI · '+BR[B]+'</div>'+L.map((r,i)=>`<div class="card" style="min-height:0;align-items:stretch;text-align:left;margin-bottom:6px"><b>${i+1}. ${esc(nice(r.name))}</b><span class="sub">${esc(r.firma||'')} · ${esc(r.range||'')}</span><span>Ciro: <b>${tl2(r.ciro)} TL</b> · Hesap: <b>${r.hesap}</b></span><span style="color:#4ade80;font-weight:800;font-size:17px">Ortalama: ${tl2(r.ort)} TL</span><button class="a x" data-k="${esc(r.key)}" onclick="rptDel(this.dataset.k)">Sil</button></div>`).join(''):'';
+  sm.innerHTML=L.length?`<div class="card" style="min-height:0;margin:0 0 12px;gap:8px;border-color:#6366f1"><div class="sec" style="margin:0">📊 ${BR[B].toUpperCase()} · SATIŞ ÖZETİ (${L.length} kişi)</div><div style="display:flex;gap:8px;width:100%;flex-wrap:wrap"><div style="flex:1 1 120px;background:#0f172a;border-radius:12px;padding:8px"><div class="sub">Toplam Ciro</div><b style="font-size:17px">${tl2(tc)} TL</b></div><div style="flex:1 1 90px;background:#0f172a;border-radius:12px;padding:8px"><div class="sub">Hesap Sayısı</div><b style="font-size:17px">${th}</b></div><div style="flex:1 1 120px;background:#0f172a;border-radius:12px;padding:8px"><div class="sub">Ortalama</div><b style="font-size:17px;color:#4ade80">${th?tl2(tc/th):'-'} TL</b></div></div><button class="a ed" style="width:100%" onclick="rptXls(RPV)">⬇ Excel indir</button></div>`:'';
+  RPV=L;el.innerHTML=L.length?'<div class="sec" style="margin:16px 2px 6px">📊 SATIŞ ORTALAMALARI · '+BR[B]+'</div>'+rptTable(L,true):'';
 }
 function rptDel(k){ask('Bu kayıt silinsin mi?',[],()=>google.script.run.withFailureHandler(e=>msg(emsg(e))).withSuccessHandler(rptLoad).delReport(k,PIN),'Sil');}
 let RFM='rpt';
