@@ -442,4 +442,88 @@ function chain_() {
   return o;
 }
 window.google = { script: { get run() { return chain_(); } } };
+
+// ---------- Bira raporu okuma düzeltmesi ----------
+// index.html'deki ocrW ve beerPages, sayfa yüklendikten sonra bunlarla değiştirilir:
+// seyrek metin modu (PSM 11) ile tablo satırları tam okunur; garson blokları sütun konumlarından ve toplam satırlarından bulunur.
+window.addEventListener('load', function () {
+window.ocrW = async function (f) {
+  if (typeof Tesseract === 'undefined') throw new Error('Okuma modülü yüklenemedi');
+  const c = await cv(f, true);
+  const wk = await Tesseract.createWorker('tur', 1, { logger: m => { if (m.status) $('st').textContent = OCRL + ' ' + (m.progress ? '%' + Math.round(m.progress * 100) : ''); } });
+  try {
+    await wk.setParameters({ tessedit_pageseg_mode: '11' });
+    const r = await wk.recognize(c);
+    return { text: r.data.text || '', W: (r.data.words || []).filter(w => w && w.text && w.text.trim() && w.bbox).map(w => ({ t: w.text.trim(), x0: w.bbox.x0, x: (w.bbox.x0 + w.bbox.x1) / 2, y: (w.bbox.y0 + w.bbox.y1) / 2, h: w.bbox.y1 - w.bbox.y0 })) };
+  } finally { try { await wk.terminate(); } catch (e) {} }
+};
+// Bira raporu ayrıştırıcı (sütun konumlarına dayanır; ürün kodu/sicil no okunamasa da çalışır)
+window.beerPages=function(pages,st){
+  const out={},warn=[],order=[],qre=/^\d{1,3}(?:\.\d{3})*,\d{3}$/,are=/^\d{1,3}(?:\.\d{3})*,\d{2}$/;
+  const fix=t=>(/^[\dOo.,]+$/.test(t)&&/\d/.test(t))?t.replace(/[Oo]/g,'0'):t;
+  const isBr=w=>['hm','izmir','optimum','mavi','bahce'].indexOf(nrm(w.t))>=0;
+  const letters=t=>t.replace(/[^A-Za-zÇĞİÖŞÜçğıöşüÂâÎîÛû]/g,'');
+  let cur=null,sube='',grand=null,pend=null;
+  const close=(tq,ta)=>{
+    if(!cur)return;
+    const c=cur;cur=null;
+    const qty=(tq!=null?tq:c.sum)-c.wheel,amt=ta!=null?ta:c.amtSum;
+    if(tq!=null&&ta==null)warn.push(nice(c.name)+': tutar okunamadı, satırların toplamı yazıldı (kontrol edin)');
+    if(c.name=='?')warn.push('Adı okunamayan garson (miktar '+qty+'): Ad sütununa adı yazın');
+    if(tq==null)warn.push(nice(c.name)+': toplam satırı okunamadı, satırlar toplandı (kontrol edin)');
+    else if(Math.abs(c.sum-tq)>0.5)warn.push(nice(c.name)+': satırlar toplamı ('+c.sum+') rapor toplamından ('+tq+') farklı, kontrol edin');
+    const k=nrm(c.name);
+    if(out[k]){out[k].qty+=qty;out[k].amt+=amt;out[k].wheel+=c.wheel;}else{out[k]={name:c.name,qty:qty,amt:amt,wheel:c.wheel};order.push(k);}
+    totals.push(tq!=null?tq:c.sum);
+  };
+  const totals=[];
+  pages.forEach(pg=>{
+    if(!sube){if(/MAVI\s*BAH/i.test(pg.text||''))sube='mavi';else if(/OPTIMUM/i.test(pg.text||''))sube='opt';}
+    const W=pg.W.map(w=>Object.assign({},w,{t:fix(w.t)}));
+    if(!W.length)return;
+    const mk=W.filter(w=>{const n=nrm(w.t);return n=='miktar'||n=='tutar';}).sort((a,b)=>a.y-b.y)[0];
+    const hdr=mk?W.filter(w=>nrm(w.t)=='urun'&&Math.abs(w.y-mk.y)<mk.h*1.5).sort((a,b)=>a.x0-b.x0)[0]||mk:null;
+    const codes=W.filter(w=>/^\d{7}$/.test(w.t)).map(w=>w.x0).sort((a,b)=>a-b);
+    let codeX=(hdr&&hdr!==mk)?hdr.x0:(codes.length?codes[codes.length>>1]:0);
+    if(!codeX){warn.push('Sayfada tablo başlığı bulunamadı');return;}
+    codeX-=6;
+    const topY=hdr?hdr.y+hdr.h:0;
+    const hs=W.map(w=>w.h).sort((a,b)=>a-b),H=hs[hs.length>>1]||12,L=[];
+    W.filter(w=>w.y>topY).sort((a,b)=>a.y-b.y).forEach(w=>{const l=L[L.length-1];if(l&&Math.abs(w.y-l.y)<H*.6){l.w.push(w);l.y=(l.y*(l.w.length-1)+w.y)/l.w.length;}else L.push({y:w.y,w:[w]});});
+    L.forEach(l=>{
+      const t=l.w.sort((a,b)=>a.x0-b.x0),left=t.filter(w=>w.x0<codeX),right=t.filter(w=>w.x0>=codeX);
+      const code=right.find(w=>/^\D?\d{7}\D?$/.test(w.t)),br=right.some(isBr);
+      const q=right.filter(w=>qre.test(w.t)).pop(),a=right.filter(w=>are.test(w.t)).pop();
+      const qv=q?num(q.t):NaN,av=a?num(a.t):NaN;
+      let prod=!!(code||br);
+      if(!prod&&q&&cur&&cur.rows>0&&qv<cur.sum*.95)prod=true;     // ürün kodu/şube okunamamış ürün satırı
+      if(prod||q){
+        const idw=left.find(w=>/\d{2}-\d{1,3}/.test(w.t));
+        const nm=left.filter(w=>w!==idw||letters(w.t).length>3).map(w=>letters(w.t.replace(/^[^A-Za-zÇĞİÖŞÜçğıöşü]*\d{2}-\d{1,3}/,''))).filter(s=>s.length>=2).join(' ');
+        if(prod&&(idw||nm.length>=4)&&(!cur||idw)){
+          if(cur&&cur.rows>0)close(null,null);   // önceki bloğun toplamı hiç okunamadı
+          cur={name:nm||'?',wheel:0,sum:0,amtSum:0,rows:0};pend=null;
+        }else if(prod&&!cur&&pend){cur={name:pend,wheel:0,sum:0,amtSum:0,rows:0};pend=null;}
+      }else{
+        const idw=left.find(w=>/\d{2}-\d{1,3}/.test(w.t)),nm=left.map(w=>letters(w.t.replace(/^[^A-Za-zÇĞİÖŞÜçğıöşü]*\d{2}-\d{1,3}/,''))).filter(x=>x.length>=2).join(' ');
+        if(!cur&&(idw||nm.length>=4)&&nm.length>=3)pend=nm;   // isim, ürün satırından ayrı satırda okunmuş
+      }
+      if(prod){
+        if(!cur)cur={name:'?',wheel:0,sum:0,amtSum:0,rows:0};
+        if(q){cur.sum+=qv;cur.rows++;if(a)cur.amtSum+=av;if(qv>0&&((a&&av===0)||(!a&&/WH?E?L+|KMPNY/i.test(t.map(w=>w.t).join(' ')))))cur.wheel+=qv;}
+      }else if(q){
+        if(cur)close(qv,a?av:null);else grand=qv;
+      }
+    });
+  });
+  if(cur&&cur.rows>0)close(null,null);
+  const gsum=totals.reduce((x,y)=>x+y,0);
+  if(grand!=null&&Math.abs(gsum-grand)>0.5)warn.push('Garson toplamları ('+gsum+') raporun genel toplamından ('+grand+') farklı: bir garson eksik ya da yanlış okunmuş olabilir');
+  const rows=order.map(k=>out[k]).map(r=>{
+    const nl=nrm(r.name),s=st.find(x=>nrm(x.name)==nl)||st.find(x=>nl.length>3&&lev(nl,nrm(x.name))<=Math.max(1,(nl.length*.2)|0));
+    return{name:s?s.name:nice(r.name),qty:r.qty,amt:r.amt,wheel:r.wheel};
+  }).sort((a,b)=>b.qty-a.qty);
+  return{rows:rows,warn:warn,sube:sube,grandOk:grand!=null&&Math.abs(gsum-grand)<=0.5};
+};
+});
 })();
