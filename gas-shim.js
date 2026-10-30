@@ -3,10 +3,10 @@
 // index.html'deki google.script.run çağrıları aynen çalışır.
 const FIREBASE_CONFIG = {
   // Mevcut Mola-takip repondaki index.html içinden firebaseConfig değerlerini buraya kopyala:
-  apiKey: 'BURAYA',
+  apiKey: 'AIzaSyD_Bl_RC8xzscXA3-GP8X2tdBi6tFhCs8E',
   authDomain: 'mola-takip-7fc53.firebaseapp.com',
   projectId: 'mola-takip-7fc53',
-  appId: 'BURAYA'
+  appId: '1:130287831940:web:c3a804d90a0225231b2bd1'
 };
 const CFG = {
   PIN: '1234',                          // Yönetici şifresi (değiştir!)
