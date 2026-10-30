@@ -1,4 +1,3 @@
-
 (function(){
 // Mola Takip - Firebase Firestore arka ucu. index.html'deki google.script.run çağrılarını karşılar.
 const FIREBASE_CONFIG = {
@@ -330,7 +329,6 @@ const API = {
       if (!line.trim()) return;
       const parts = split(line), name = parts[0], cells = parts.slice(1);
       if (!name) {   // isim boş = istasyon kodu satırı (T1, S4...)
-        if (last && cells.some(Boolean)) for (let i = 0; i < 7; i++) codes[last.id][i] = String(cells[last.pair ? i * 2 : i] || '').slice(0, 12);
         return;
       }
       const s = staff.find(x => norm_(x.name) === norm_(name));
