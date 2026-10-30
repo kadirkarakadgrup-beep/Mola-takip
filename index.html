@@ -139,7 +139,7 @@ function head(){
         <button class="a off" onclick="mailTest()">✉ Mail Testi</button>
         <button class="a ed" onclick="tok()">🔑 Ntfy Token</button>
         <button class="a ed" onclick="voiceTest()">🔊 Anons Testi</button><button class="a off" onclick="shiftClr()">🗑 Vardiyayı Temizle</button></div></details>`
-    :`<button class="a ed" onclick="rptShow()">📊 Ciro Ortalama</button><button class="a ed" onclick="shiftShow()">🕗 Vardiya</button>`;
+    :`<button class="a ed" onclick="rptShow()">📊 Ciro Ortalama</button><button class="a ed" onclick="shiftShow()">🕗 Vardiya</button><button class="a" style="flex-basis:100%" onclick="regMe()">➕ Kayıt Ol (personel listesine ekle)</button>`;
   $('an').style.display=(ANONS&&M=='y')?'block':'none';
   $('an').textContent='📢 Anons modu açık: bu cihazın ekranı açık ve şarjda kalmalı. Molası dolan kişiye sesli seslenilir.';
 }
@@ -208,7 +208,7 @@ function draw(){
   if(nos.length)h+='<div class="sec">VARDİYA DIŞI</div>'+nos.map(tile).join('');
   if(offs.length)h+='<div class="sec">İZİNLİ</div>'+offs.map(tile).join('');
   h+='</div>';
-  $('list').innerHTML=S.length?h:'<p class="sub">Bu şubede personel yok. Yönetici panelinden ekleyin.</p>';
+  $('list').innerHTML=S.length?h:(D.staff.length?'<p class="sub">Bugün vardiyada görünen personel yok. 🕗 Vardiya butonundan haftalık tabloya bakın.</p>':'<p class="sub">Bu şubede personel yok. Aşağıdaki Kayıt Ol butonuyla kendini ekleyebilir ya da yönetici ekleyebilir.</p>');
   if(M=='y'&&!RPL){RPL=1;rptLoad();}
   rptDraw();
   tick();
@@ -221,6 +221,12 @@ function startB(id,k){
 }
 function endB(id){run().endBreak(id,PIN);}
 function endBG(id){ask('Molan bitsin mi?',[],()=>run().endBreak(id,''),'Evet, bitir');}
+function regMe(){
+  ask('Kayıt Ol · '+BR[B],[{label:'Ad Soyad'},{label:'Telefon (isteğe bağlı)',type:'tel'},{label:'E-posta (isteğe bağlı)'}],v=>{
+    if(!v[0].trim())return;
+    google.script.run.withFailureHandler(e=>msg(emsg(e))).withSuccessHandler(n=>{msg('Kaydın oluşturuldu ✅\n'+n+' · '+BR[B]);load();}).selfRegister(B,v[0],v[1],v[2]);
+  },'Kaydol');
+}
 function pop(t,h){msg(t);$('mf').innerHTML=h;}
 function rptShow(){google.script.run.withFailureHandler(e=>msg(emsg(e))).withSuccessHandler(r=>{
   pop('📊 Ciro Ortalama',r.length?r.map((x,i)=>`<div style="padding:8px 0;border-top:1px solid #334155"><b>${i+1}. ${esc(nice(x.name))}</b><br><span class="sub">${esc(x.range||'')}</span><br>Ciro: ${tl2(x.ciro)} TL · Hesap: ${x.hesap}<br><b style="color:#4ade80">Ortalama: ${tl2(x.ort)} TL</b></div>`).join(''):'<span class="sub">Henüz rapor girilmemiş.</span>');
@@ -281,21 +287,56 @@ async function ocr(f){
   if(typeof Tesseract==='undefined')throw new Error('Okuma modülü yüklenemedi');
   const c=await prep(f);
   const r=await Tesseract.recognize(c,'tur',{logger:m=>{if(m.status)$('st').textContent='📖 Görsel okunuyor… '+(m.progress?'%'+Math.round(m.progress*100):'');}});
-  $('st').textContent='';return r.data.text||'';
+  $('st').textContent='';return {text:r.data.text||'',words:r.data.words||[]};
 }
+const MONEY='(\\d{1,3}(?:\\.\\d{3})*,\\d{2})';
 function parseRep(t){
   const g=re=>{const m=t.match(re);return m?m[1].trim():'';};
   let name=g(/Ad[ıiIl1]\s*:\s*[\w\-]*\s*[\/|\\]\s*([^\n\r]+)/i);const firma=g(/Firma\s+Ad[ıiI]\s*:\s*([^\n\r]+)/i);
-  const range=g(/Tarih\s+Aral[ıiI][ğg][ıiI]\s*:\s*([\d.]+\s*-\s*[\d.]+)/i),rep=num(g(/Ortalama\s+Hesap\s+Tutar\s*:?\s*([\d.]+,\d{2})/i));
-  let cnt='',amt='',m;const re=/[ÖO0]demeler\s+Toplam[ıiI]\s*:?\s*([\d.]+)\s+([\d.]+,\d{2})/gi;
-  while((m=re.exec(t))){cnt=m[1];amt=m[2];}
-  let hesap=num(g(/Hesap\s+Say[ıiI]s[ıiI]\s*:?\s*([\d.]+)/i));if(!(hesap>0))hesap=num(cnt);
-  let ciro=num(amt);if(!(ciro>0))ciro=num(g(/Toplam\s+Sat[ıiI][şs]\s*_?\s*:?\s*([\d.]+,\d{2})/i));
+  const range=g(/Tarih\s+Aral\S{2,4}\s*:\s*([\d.]+\s*-\s*[\d.]+)/i),rep=num(g(new RegExp('Ortalama\\s+Hesap\\s+Tutar\\s*:?\\s*'+MONEY,'i')));
+  const pairs=[],re=new RegExp('[ÖO0]demeler\\s+Toplam\\S{0,3}\\s*:?\\s*(\\d[\\d.]*)\\D{0,4}?\\s*'+MONEY,'gi');let m;
+  while((m=re.exec(t)))pairs.push({c:num(m[1]),a:num(m[2])});
+  let hesap=num(g(/Hesap\s+Say\S{0,5}\s*:?\s*(\d[\d.]*)/i));
+  if(!(hesap>0)&&pairs.length)hesap=pairs[pairs.length-1].c;   // yedek: saat aralığı tablosunun adedi = hesap sayısı
+  const pr=pairs.find(x=>x.c!=hesap)||pairs[0];   // ödeme tipi tablosundaki Ödemeler Toplamı
+  let ciro=pr?pr.a:NaN;if(!(ciro>0))ciro=num(g(new RegExp('Toplam\\s+Sat\\S{0,4}\\s*[_:]*\\s*'+MONEY,'i')));
   const st=(D&&D.staff)||[],hit=st.find(x=>name&&nrm(name)==nrm(x.name))||st.find(x=>nrm(t).includes(nrm(x.name)));
   if(hit)name=hit.name;
   return{name:name,firma:firma,range:range,rep:rep>0?rep:'',hesap:hesap>0?hesap:'',ciro:ciro>0?ciro:''};
 }
-function parseShift(t){
+const DN=[['pazartesi','pzt','pts'],['sali','sal'],['carsamba','car','crs'],['persembe','per','prs'],['cuma','cum'],['cumartesi','cmt','cts'],['pazar','paz']];
+const TRX=/(\d{1,2})\s*[:.]\s*(\d{2})\s*[-–—~]?\s*(\d{1,2})\s*[:.]\s*(\d{2})/g;
+const SHH='Ad\tPzt\tSal\tÇar\tPer\tCum\tCmt\tPaz\n';
+// Kelime konumlarından sütun bulur: boş (izinli) hücreler kaymaz
+function parseShiftW(words){
+  const W=(words||[]).filter(w=>w&&w.text&&w.text.trim()&&w.bbox).map(w=>({t:w.text.trim(),x0:w.bbox.x0,x:(w.bbox.x0+w.bbox.x1)/2,y:(w.bbox.y0+w.bbox.y1)/2,h:w.bbox.y1-w.bbox.y0}));
+  if(!W.length)return '';
+  const first=DN.map(n=>W.filter(w=>n.includes(nrm(w.t))).sort((a,b)=>a.y-b.y)[0]).filter(Boolean);
+  if(first.length<4)return '';
+  const ys=first.map(c=>c.y).sort((a,b)=>a-b),hy=ys[Math.floor(ys.length/2)],mh=Math.max(10,first[0].h);
+  let cx=DN.map(n=>{const c=W.find(w=>n.includes(nrm(w.t))&&Math.abs(w.y-hy)<mh*1.5);return c?c.x:null;});
+  const kn=cx.map((v,i)=>v==null?-1:i).filter(i=>i>=0);
+  if(kn.length<4)return '';
+  const a=kn[0],b=kn[kn.length-1],step=(cx[b]-cx[a])/(b-a);
+  cx=cx.map((v,i)=>v==null?cx[a]+(i-a)*step:v);
+  const st=(D&&D.staff)||[],rows=[];
+  W.filter(w=>w.y>hy+mh*.8).sort((u,v)=>u.y-v.y).forEach(w=>{const r=rows[rows.length-1];if(r&&Math.abs(w.y-r.y)<mh*.7){r.w.push(w);r.y=(r.y*(r.w.length-1)+w.y)/r.w.length;}else rows.push({y:w.y,w:[w]});});
+  const out=[];
+  rows.forEach(r=>{
+    let str='';const pos=[];
+    r.w.sort((u,v)=>u.x0-v.x0).forEach(w=>{if(str){str+=' ';pos.push(w.x0);}const wd=2*(w.x-w.x0);for(let k=0;k<w.t.length;k++)pos.push(w.x0+wd*(k+.5)/w.t.length);str+=w.t;});
+    const nl=nrm(str),s=st.find(x=>nl.includes(nrm(x.name)));if(!s)return;
+    const week=['','','','','','',''];let m;TRX.lastIndex=0;
+    while((m=TRX.exec(str))){
+      const x=pos[m.index+Math.floor(m[0].length/2)];let ci=0;
+      cx.forEach((v,i)=>{if(Math.abs(v-x)<Math.abs(cx[ci]-x))ci=i;});
+      if(!week[ci])week[ci]=p(m[1])+':'+m[2]+'-'+p(m[3])+':'+m[4];
+    }
+    out.push(s.name+'\t'+week.join('\t'));
+  });
+  return out.length?SHH+out.join('\n'):'';
+}
+function parseShift(t){   // yedek: sütun bulunamazsa sırayla
   const st=(D&&D.staff)||[],rows=[],re=/(\d{1,2})\s*[:.]\s*(\d{2})\s*[-–—]\s*(\d{1,2})\s*[:.]\s*(\d{2})|([iİıI]z[iİıI]n|off|rapor|y[ıiİI]ll[ıiİI]k)/gi;
   t.split(/\r?\n/).forEach(line=>{
     const nl=nrm(line),s=st.find(x=>nl.includes(nrm(x.name)));if(!s)return;
@@ -304,20 +345,20 @@ function parseShift(t){
     while(cells.length<7)cells.push('');
     rows.push(s.name+'\t'+cells.join('\t'));
   });
-  return rows.join('\n');
+  return rows.length?SHH+rows.join('\n'):'';
 }
 $('rf').addEventListener('change',async e=>{
   const f=e.target.files[0];if(!f)return;
   try{
-    const t=await ocr(f);
-    if(RFM=='sh')shiftUp(parseShift(t)||t);
-    else{const r=parseRep(t);if(!r.name||!r.ciro||!r.hesap)r.raw=t.replace(/\s+/g,' ').slice(0,350);rptConfirm(r);}
+    const o=await ocr(f);
+    if(RFM=='sh')shiftUp(parseShiftW(o.words)||parseShift(o.text)||o.text);
+    else{const r=parseRep(o.text);if(!r.name||!r.ciro||!r.hesap)r.raw=o.text.replace(/\s+/g,' ').slice(0,350);rptConfirm(r);}
   }catch(er){$('st').textContent='';msg('Görsel okunamadı:\n'+emsg(er)+'\nİnternet bağlantısını kontrol edin ya da elle girin.');}
 });
 function shrink(f){return new Promise((ok,no)=>{const im=new Image(),u=URL.createObjectURL(f);im.onload=()=>{const w=Math.min(1600,im.width),c=document.createElement('canvas');c.width=w;c.height=Math.round(im.height*w/im.width);c.getContext('2d').drawImage(im,0,0,c.width,c.height);URL.revokeObjectURL(u);ok(c.toDataURL('image/jpeg',.9).split(',')[1]);};im.onerror=no;im.src=u;});}
 function rptConfirm(r){
   const f=n=>(n===''||n==null)?'':tl2(n);
-  ask((r.raw?'⚠ Bazı değerler okunamadı, elle tamamlayın.\n':'Okunan değerleri kontrol edin.\n')+(r.ciro&&r.hesap?'Ortalama: '+tl2(r.ciro/r.hesap)+' TL (ödemeler toplamı ÷ hesap)\n':'')+(r.rep?'Rapordaki ortalama hesap tutarı: '+f(r.rep)+' TL\n':'')+(r.raw?'\nOkunan metin: '+r.raw:''),
+  ask((r.raw?'⚠ Bazı değerler okunamadı, elle tamamlayın.\n':'Okunan değerleri kontrol edin.\n')+(r.ciro&&r.hesap?'Ortalama: '+tl2(r.ciro/r.hesap)+' TL (ödemeler toplamı ÷ hesap sayısı)\n':'')+(r.raw?'\nOkunan metin: '+r.raw:''),
     [{label:'Ad Soyad',val:nice(r.name)},{label:'Ciro (Ödemeler Toplamı)',val:f(r.ciro)},{label:'Hesap Sayısı',val:r.hesap===''?'':String(r.hesap)},{label:'Dönem',val:r.range},{label:'Firma',val:r.firma}],
     v=>{const d={name:v[0],ciro:num(v[1]),hesap:num(v[2]),range:v[3],firma:v[4]};
       google.script.run.withFailureHandler(e=>msg(emsg(e))).withSuccessHandler(o=>{msg(nice(d.name)+'\nCiro: '+tl2(d.ciro)+' TL\nHesap: '+d.hesap+'\nOrtalama: '+tl2(o.ort)+' TL');rptLoad();}).saveReport(d,PIN);},'Kaydet');
