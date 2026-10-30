@@ -224,8 +224,7 @@ const API = {
     });
     if (s.active && s.active.posting) await schedule_(s.id, s.active.start, msgOf_(s, s.active), String(Math.round(end_(s.active) / 1000)));
   },
-  async endBreak(id, pin) {
-    auth_(pin);
+  async endBreak(id, pin) {   // garson kendi molasını şifresiz bitirir
     let old = null, rec = null;
     await upd_(id, s => {
       const a = s.active;
@@ -357,6 +356,9 @@ const API = {
   async listReports(pin) {
     auth_(pin);
     return (await col('reports').get()).docs.map(d => d.data()).sort((a, b) => b.ort - a.ort);
+  },
+  async listReportsPub() {   // garson ekranı: şifresiz, salt okunur
+    return (await col('reports').get()).docs.map(d => { const r = d.data(); return { name: r.name, range: r.range, ciro: r.ciro, hesap: r.hesap, ort: r.ort }; }).sort((a, b) => b.ort - a.ort);
   },
   async delReport(key, pin) { auth_(pin); await col('reports').doc(key).delete(); }
 };
