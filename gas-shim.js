@@ -75,9 +75,13 @@ function parseCell_(c) {
   return f(h1, i1) + '-' + f(h2, i2);
 }
 function opts_(s) {
-  const r = [], T = mainT_(s), md = md_();
-  let b = 0;
-  if (md >= CFG.MAIN.from * 60 && md < CFG.MAIN.to * 60) for (const q of (CFG.SEQ[s.branch] || CFG.SEQ.opt)) { b += q.d; if (T < b) { r.push({ k: q.k, n: q.n, d: b - T, full: q.d }); break; } }
+  // 11:00-20:00 arası çay ve yemek molası aynı anda seçilebilir; her türün toplam hakkı sıradaki mola sürelerinin toplamıdır
+  const r = [], md = md_(), seq = CFG.SEQ[s.branch] || CFG.SEQ.opt, seen = {};
+  if (md >= CFG.MAIN.from * 60 && md < CFG.MAIN.to * 60) seq.forEach(q => {
+    if (seen[q.k]) return; seen[q.k] = 1;
+    const quota = seq.filter(x => x.k === q.k).reduce((a, x) => a + x.d, 0), rem = quota - usedK_(s, q.k);
+    if (rem > 0) r.push({ k: q.k, n: q.n, d: Math.min(q.d, rem), full: q.d });
+  });
   CFG.EXTRA.forEach(e => { const d = e.d - usedK_(s, e.k); if (md >= e.from * 60 && md < e.to * 60 && d > 0) r.push({ k: e.k, n: e.n, d: d, full: e.d }); });
   return r;
 }
@@ -407,6 +411,7 @@ const API = {
     return { n: Math.min(rows.length, 80) };
   },
   async listBeer(pin) { auth_(pin); return (await col('beer').get()).docs.map(d => d.data()).sort((a, b) => b.qty - a.qty); },
+  async listBeerPub() { return (await col('beer').get()).docs.map(d => { const r = d.data(); return { key: r.key, sube: r.sube, name: r.name, range: r.range, qty: r.qty, amt: r.amt }; }).sort((a, b) => b.qty - a.qty); },
   async delBeer(key, pin) { auth_(pin); await col('beer').doc(key).delete(); }
 };
 
