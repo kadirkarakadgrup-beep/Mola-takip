@@ -97,9 +97,20 @@ function shift_(s, md, wd) {
 const msgOf_ = (s, a) => `${nice_(s.name)} (${branchName_(s.branch)}) - ${a.dur} dk ${a.n} süresi doldu!`;
 
 // ---------- Firestore ----------
+// Personel listesi canlı dinlenir: her 5 sn'lik yenileme bellekten okur, Firestore'dan sadece DEĞİŞEN belgeler okunur
+// (eski sürüm her yenilemede tüm personeli okuyup günlük 50.000 okuma kotasını dolduruyordu)
+let CACHE = [], CERR = null;
+const snapReady = new Promise(res => {
+  const sub = () => ready.then(() => col('staff').onSnapshot(q => {
+    CERR = null; CACHE = q.docs.map(d => { const s = d.data(); s.id = d.id; return s; }); res();
+  }, e => { CERR = e; res(); setTimeout(sub, 60000); })).catch(e => { CERR = e; res(); setTimeout(sub, 60000); });
+  sub();
+});
 async function allStaff_() {
-  const q = await col('staff').get(), t = today_();
-  return q.docs.map(d => { const s = d.data(); s.id = d.id; if (s.day !== t) { s.day = t; s.done = []; s.active = null; } s.done = s.done || []; return s; });
+  await snapReady;
+  if (CERR && !CACHE.length) throw CERR;
+  const t = today_();
+  return CACHE.map(o => { const s = copy_(o); if (s.day !== t) { s.day = t; s.done = []; s.active = null; } s.done = s.done || []; return s; });
 }
 const clean_ = s => JSON.parse(JSON.stringify(s));
 async function upd_(id, fn) {
