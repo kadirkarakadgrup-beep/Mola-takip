@@ -15,8 +15,8 @@ const CFG = {
   },
   MAIN: { from: 11, to: 20 },
   EXTRA: [
-    { k: 'kahvalti', n: 'Kahvaltı Molası', d: 15, from: 8, to: 11 },
-    { k: 'aksam', n: 'Akşam Yemeği', d: 15, from: 20, to: 24 }
+    { k: 'kahvalti', n: 'Kahvaltı Molası', d: 15, from: 9, to: 12 },
+    { k: 'aksam', n: 'Akşam Yemeği', d: 15, from: 20, to: 23 }
   ]
 };
 
@@ -560,7 +560,10 @@ window.pkFilter=v=>{const q=nrm(v);document.querySelectorAll('.pkc').forEach(b=>
 window.draw=function(){
   if(M!='g'){od();return;}
   const me=getMe();
-  if(me&&D.staff.some(s=>s.id==me)){const all=D.staff;D.staff=all.filter(s=>s.id==me);try{od();}finally{D.staff=all;}return;}
+  if(me&&D.staff.some(s=>s.id==me)){const all=D.staff,s0=all.find(s=>s.id==me);D.staff=all.filter(s=>s.id==me);try{od();}finally{D.staff=all;}
+    const left=Math.max(0,D.total-usedOf(s0));
+    $('list').insertAdjacentHTML('afterbegin','<div class="hi"><b>'+esc(ini(s0.name))+'</b><div><div class="hi1">Merhaba, '+esc(nice(s0.name).split(' ')[0])+' 👋</div><div class="hi2">'+(s0.shTxt?'🕗 Bugün '+esc(s0.shTxt.replace('-','–'))+' · ':'')+'☕ Kalan mola '+left+' dk</div></div></div>');
+    return;}
   head();
   const L=D.staff.filter(s=>!s.off).sort((a,b)=>a.name.localeCompare(b.name,'tr')),sig=L.map(s=>s.id).join();
   if($('pks')&&window.__pkSig===sig)return;   // 5 sn'lik yenilemede arama kutusu silinmesin
@@ -573,7 +576,7 @@ window.head=function(){
   oh();
   if(M=='g'){
     const me=getMe();
-    $('tools').innerHTML='<div class="tiles"><button onclick="rptShow()"><i>📊</i><span>Ciro<br>Ortalama</span></button><button onclick="shiftShow()"><i>🗓️</i><span>Haftalık<br>Vardiya</span></button><button onclick="beerShow()"><i>🍺</i><span>Bira<br>Satışı</span></button></div>'
+    $('tools').innerHTML=''
       +(me?'<div class="chipsrow"><button class="pill" onclick="myCode()">🔔 Bildirim kodum</button><button class="pill" onclick="pickMe(\'\')">↩ Kişiyi değiştir</button></div>':'');
   }else if(M=='y')$('tools').insertAdjacentHTML('beforeend','<button class="a ed" onclick="beerManual()">✍ Elle Bira</button>');
 };
@@ -581,6 +584,75 @@ window.head=function(){
 const sty=document.createElement('style');
 sty.textContent='.tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;width:100%}.tiles button{border:1px solid rgba(148,163,184,.18);border-radius:18px;padding:14px 4px;background:linear-gradient(160deg,#1f2b42,#162033);color:#e2e8f0;font-weight:700;font-size:13px;line-height:1.25;box-shadow:0 6px 16px rgba(0,0,0,.28);display:flex;flex-direction:column;align-items:center;gap:6px}.tiles i{font-style:normal;font-size:26px}.tiles button:active{transform:scale(.97)}.pill{border:1px solid rgba(148,163,184,.25);background:rgba(148,163,184,.1);color:#e2e8f0;border-radius:999px;padding:10px 16px;font-weight:600;font-size:13px}.chipsrow{display:flex;gap:8px;flex-wrap:wrap;width:100%}.pkh{font-weight:800;font-size:16px;display:flex;justify-content:space-between;align-items:center;margin:4px 2px}.pkh span{font-size:12px;color:#94a3b8;font-weight:600}.pks{width:100%;padding:13px 14px;border-radius:14px;border:1px solid #334155;background:#0f172a;color:#fff;font-size:16px;margin:8px 0 12px}.pkg{display:grid;grid-template-columns:1fr 1fr;gap:10px}.pkc{display:flex;align-items:center;gap:10px;text-align:left;padding:10px;border-radius:16px;border:1px solid rgba(148,163,184,.15);background:linear-gradient(160deg,#1f2b42,#162033);color:#f1f5f9;font-size:14px;font-weight:600;box-shadow:0 4px 12px rgba(0,0,0,.25)}.pkc b{flex:none;width:38px;height:38px;border-radius:50%;display:grid;place-items:center;background:linear-gradient(135deg,#6366f1,#8b5cf6);font-size:14px}.pkc span{line-height:1.2;word-break:break-word}.card{border-radius:20px}#list .btns .a{min-height:56px;font-size:16px}';
 document.head.appendChild(sty);
-var hs = document.querySelector('.hs'); if (hs) hs.textContent += ' · v5';   // yeni dosyanın yüklendiğini göstermek için
+
+// ===== Sayfalar: Mola | Ciro | Bira | Vardiya (her biri tam sayfa) =====
+let PGV='mola',PSIG='',PRQ=0;
+const NV=document.createElement('div');NV.id='nv';NV.className='nv';document.querySelector('.hd').after(NV);
+const PG=document.createElement('div');PG.id='pg';PG.hidden=true;$('beer').after(PG);
+const NAVS=[['mola','🕐','Mola'],['ciro','📊','Ciro'],['bira','🍺','Bira'],['vard','🗓️','Vardiya']];
+const nvDraw=()=>{NV.innerHTML=NAVS.map(n=>`<button class="${n[0]==PGV?'on':''}" onclick="goPg('${n[0]}')"><i>${n[1]}</i>${n[2]}</button>`).join('');};
+window.goPg=v=>{
+  PGV=v;PSIG='';nvDraw();
+  ['tools','st','sum','list','rpt','beer'].forEach(id=>{const e=$(id);if(e)e.style.display=v=='mola'?'':'none';});
+  PG.hidden=v=='mola';
+  if(v!='mola'){PG.innerHTML='<p class="sub">Yükleniyor…</p>';pgSync();}
+  window.scrollTo(0,0);
+};
+nvDraw();
+const pgSig=()=>B+M+PGV+(D?D.staff.map(s=>s.id+(s.sh||[]).join('|')).join(','):'');
+function pgSync(){if(PGV=='mola'||!D)return;const s=pgSig();if(s!==PSIG){PSIG=s;renderPg();}}
+const dlX=(sheets,fn)=>{
+  try{if(typeof XLSX!=='undefined'){const wb=XLSX.utils.book_new();sheets.forEach(s=>XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(s[1]),s[0].slice(0,30)));XLSX.writeFile(wb,fn+'.xlsx');return;}}catch(e){}
+  const csv='\ufeff'+sheets[0][1].map(r=>r.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(';')).join('\r\n'),a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download=fn+'.csv';document.body.appendChild(a);a.click();a.remove();
+};
+const fCiro=async()=>(await gs(M=='y'?'listReports':'listReportsPub',...(M=='y'?[PIN]:[]))).filter(inB).sort((a,b)=>b.ort-a.ort);
+const fBira=async()=>(await gs(M=='y'?'listBeer':'listBeerPub',...(M=='y'?[PIN]:[]))).filter(inB).sort((a,b)=>b.qty-a.qty);
+const rCiro=L=>{const c=L.reduce((a,r)=>a+Number(r.ciro||0),0),h=L.reduce((a,r)=>a+Number(r.hesap||0),0);return [['#','Ad Soyad','Ciro (TL)','Hesap Sayısı','Ortalama (TL)']].concat(L.map((r,i)=>[i+1,nice(r.name),Number(r.ciro),Number(r.hesap),Number(r.ort)]),[['','TOPLAM',c,h,h?Math.round(c/h*100)/100:0]]);};
+const rBira=L=>[['#','Ad Soyad','Bira Miktarı (Wheel hariç)','Dönem']].concat(L.map((r,i)=>[i+1,nice(r.name),Number(r.qty),r.range||'']),[['','TOPLAM',L.reduce((a,r)=>a+Number(r.qty||0),0),'']]);
+const rVard=()=>[['Ad Soyad'].concat(DAYS.map(d=>d.charAt(0)+d.slice(1).toLocaleLowerCase('tr')))].concat(((D&&D.staff)||[]).filter(s=>!s.off&&s.sh).map(s=>[nice(s.name)].concat(DAYS.map((d,i)=>(s.sh[i]||'İZİN').replace('-','–')))));
+window.pgXls=async k=>{
+  try{
+    const fn='HappyMoons_'+BR[B].replace(/\s/g,'_')+'_'+new Date().toISOString().slice(0,10),sh=[];
+    if(k=='ciro'||k=='all')sh.push(['Ciro Ortalama',rCiro(await fCiro())]);
+    if(k=='bira'||k=='all')sh.push(['Bira Satışı',rBira(await fBira())]);
+    if(k=='vard'||k=='all')sh.push(['Vardiya',rVard()]);
+    if(!sh.length||sh.every(s=>s[1].length<2)){msg('İndirilecek kayıt yok.');return;}
+    dlX(sh,fn);
+  }catch(e){msg(emsg(e));}
+};
+function vardHtml(){
+  const td=(new Date().getDay()+6)%7,st=((D&&D.staff)||[]).filter(s=>!s.off),me=getMe();
+  if(!st.some(s=>s.sh))return '<p class="sub" style="padding:10px">Bu şube için vardiya henüz yüklenmedi.</p>';
+  const mon=new Date();mon.setDate(mon.getDate()-td);
+  const dts=DAYS.map((d,i)=>{const x=new Date(mon);x.setDate(mon.getDate()+i);return x.toLocaleDateString('tr-TR',{day:'numeric',month:'short'});});
+  const hd='<tr><th class="nmc">Personel</th>'+DAYS.map((d,i)=>`<th class="${i==td?'td':''}">${dts[i]}<br><span class="dn">${d}</span></th>`).join('')+'</tr>';
+  return '<div style="overflow:auto"><table class="xl">'+hd+st.map(s=>'<tr'+(s.id==me&&M=='g'?' style="outline:3px solid #facc15;outline-offset:-3px"':'')+'><td class="nmc">'+esc(nice(s.name).toLocaleUpperCase('tr'))+'</td>'+DAYS.map((d,i)=>{const c=shiftCell(s.sh&&s.sh[i]);return `<td class="c ${i==td?'tdy':''}" style="background:${c.bg}">${c.a}</td>`;}).join('')+'</tr>').join('')+'</table></div>';
+}
+async function renderPg(){
+  const v=PGV,my=++PRQ,adm=M=='y',b=(f,t,c)=>`<button class="a ${c||'ed'}" onclick="${f}">${t}</button>`;
+  let title='',acts='',body='';
+  try{
+    if(v=='ciro'){const L=await fCiro();title='📊 Ciro Ortalama';acts=b("pgXls('ciro')",'⬇ Excel','')+(adm?b('rptPick()','📷 Rapor yükle')+b('rptManual()','✍ Elle'):'');body=L.length?rptTable(L,adm):'<p class="sub" style="padding:10px">Bu şube için henüz rapor girilmemiş.</p>';}
+    else if(v=='bira'){const L=await fBira();title='🍺 Bira Satışı';acts=b("pgXls('bira')",'⬇ Excel','')+(adm?b('beerPick()','📷 Görselleri yükle')+b('beerManual()','✍ Elle'):'');body=L.length?beerTable(L,adm):'<p class="sub" style="padding:10px">Bu şube için henüz bira satışı girilmemiş.</p>';}
+    else{title='🗓️ Haftalık Vardiya';acts=b("pgXls('vard')",'⬇ Excel','')+(adm?b('shiftUp()','📅 Excel yapıştır')+b('shiftPick()','📷 Görsel')+b('shiftClr()','🗑 Temizle','off'):'');body=vardHtml();}
+    if(adm)acts+=b("pgXls('all')",'⬇ Hepsi','an');
+  }catch(e){body='<div class="err">'+esc(emsg(e))+'</div>';}
+  if(my!==PRQ||PGV!=v)return;
+  PG.innerHTML=`<div class="pgh"><h2>${title}<small>${BR[B]}</small></h2><div class="pga">${acts}</div></div><div class="pgb">${body}</div>`;
+}
+const d2=window.draw;window.draw=function(){d2();pgSync();};
+const orl=window.rptLoad;window.rptLoad=function(){orl();if(PGV!='mola'){PSIG='';setTimeout(pgSync,900);}};
+// ----- Bildirim kurulumu: tek dokunuşla ntfy -----
+window.myCode=()=>google.script.run.withFailureHandler(e=>msg(emsg(e))).withSuccessHandler(c=>{
+  pop('🔔 Mola bildirimi','<p style="margin:0 0 10px;line-height:1.5">Molan bitince telefonuna bildirim gelsin:</p><ol style="padding-left:20px;line-height:1.6;margin:0 0 12px"><li>Telefonuna <b>ntfy</b> uygulamasını kur.</li><li>Aşağıdaki düğmeye bas ya da kodu uygulamada <b>+</b> ile ekle.</li></ol><div style="background:#0f172a;border-radius:12px;padding:12px;font-family:monospace;word-break:break-all;margin-bottom:10px">'+esc(c)+'</div><a class="a" style="margin-bottom:8px" href="ntfy://ntfy.sh/'+encodeURIComponent(c)+'">📲 ntfy\'de aç</a><button class="a ed" style="width:100%" onclick="try{navigator.clipboard.writeText(\''+c+'\');this.textContent=\'✓ Kopyalandı\';}catch(e){}">Kodu kopyala</button>');
+  $('mo').textContent='Kapat';
+}).getTopic(getMe(),'');
+// ----- Personelin kendi ekranında da sesli uyarı -----
+const oa=window.alarm;window.alarm=function(s){oa(s);if(M=='g'){try{siren();setTimeout(()=>speak(nice(s.name)+', molan bitti! Çabuk postana geç!'),650);}catch(e){}}};
+const sty2=document.createElement('style');
+sty2.textContent='.nv{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:0 0 12px}.nv button{border:1px solid rgba(148,163,184,.18);border-radius:16px;padding:10px 2px;background:#172033;color:#94a3b8;font-weight:700;font-size:12px;display:flex;flex-direction:column;align-items:center;gap:3px}.nv button i{font-style:normal;font-size:20px}.nv button.on{background:linear-gradient(135deg,#3b82f6,#6d28d9);color:#fff;border-color:transparent;box-shadow:0 6px 16px rgba(79,70,229,.45)}#pg .pgh{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin:2px 0 12px}#pg h2{margin:0;font-size:19px}#pg h2 small{display:block;font-size:12px;color:#fde68a;letter-spacing:.14em;text-transform:uppercase;margin-top:3px}#pg .pga{display:flex;gap:8px;flex-wrap:wrap}#pg .pga .a{padding:10px 14px}#pg .pgb{background:#0b1220;border:1px solid rgba(148,163,184,.12);border-radius:18px;padding:10px}#pg .xl2{font-size:14px!important}#pg .xl{font-size:13px}.hi{display:flex;align-items:center;gap:12px;padding:14px;border-radius:20px;background:linear-gradient(135deg,#1e3a8a,#4c1d95);margin:0 0 12px;border:1px solid rgba(255,255,255,.1)}.hi b{flex:none;width:46px;height:46px;border-radius:50%;display:grid;place-items:center;background:linear-gradient(135deg,#f59e0b,#fde68a);color:#1e1b4b;font-size:17px}.hi1{font-weight:800;font-size:18px}.hi2{font-size:13px;color:#e2e8f0;margin-top:3px}';
+document.head.appendChild(sty2);
+var hs = document.querySelector('.hs'); if (hs) hs.textContent += ' · v6';   // yeni dosyanın yüklendiğini göstermek için
 });
 })();
