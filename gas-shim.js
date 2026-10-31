@@ -430,6 +430,15 @@ const API = {
   async listBeerPub() { return (await col('beer').get()).docs.map(d => { const r = d.data(); return { key: r.key, sube: r.sube, name: r.name, range: r.range, qty: r.qty, amt: r.amt }; }).sort((a, b) => b.qty - a.qty); },
   async delBeer(key, pin) { auth_(pin); await col('beer').doc(key).delete(); },
   async getTargets() { const d = await col('cfg').doc('targets').get(); return d.exists ? d.data() : {}; },
+  async saveShiftImg(sube, img, pin) {
+    auth_(pin);
+    if (sube !== 'opt' && sube !== 'mavi') throw new Error('Şube geçersiz');
+    if (typeof img !== 'string' || img.length > 950000) throw new Error('Görsel çok büyük');
+    if (img && !/^data:image\/(jpeg|png|webp);base64,/.test(img)) throw new Error('Görsel biçimi geçersiz');
+    await col('cfg').doc('shiftimg_' + sube).set({ img: img, t: Date.now() });
+    return 'ok';
+  },
+  async getShiftImg(sube) { const d = await col('cfg').doc('shiftimg_' + sube).get(); return d.exists ? d.data() : null; },
   async setTarget(sube, kind, val, pin) {
     auth_(pin);
     const v = Number(val);
@@ -643,7 +652,7 @@ const nR=s=>String(s||'').trim().replace(/\s*[-–—]\s*/g,'-').replace(/\s+/g,
 const grp=L=>{const m={};L.forEach(r=>{const k=nR(r.range)||('Yükleme '+new Date(r.t||0).toLocaleDateString('tr-TR',{timeZone:'Europe/Istanbul'}));const g=m[k]||(m[k]={k:k,t:0,rows:[]});g.rows.push(r);g.t=Math.max(g.t,r.t||0);});return Object.values(m).sort((a,b)=>b.t-a.t);};
 const selG=k=>{const G=PC[k];return (M=='y'&&PSEL[k]&&G.find(g=>g.k==PSEL[k]))||G[0]||null;};
 const ensG=async k=>{if(!PC[k].length)PC[k]=grp(await(k=='ciro'?fCiro():fBira()));return selG(k);};
-window.setPer=(k,p)=>{PSEL[k]=p;renderPg();};
+window.setPer=(k,p)=>{PSEL[k]=p;renderPg(true);};
 window.delPer=k=>{const g=selG(k);if(!g)return;ask('“'+g.k+'” dönemindeki '+g.rows.length+' kayıt silinsin mi?',[],async()=>{try{for(const r of g.rows)await gs(k=='ciro'?'delReport':'delBeer',r.key,PIN);PSEL[k]=null;rptLoad();}catch(e){msg(emsg(e));}},'Sil');};
 window.pgXls=async k=>{
   try{
@@ -663,17 +672,28 @@ function vardHtml(){
   const hd='<tr><th class="nmc">Personel</th>'+DAYS.map((d,i)=>`<th class="${i==td?'td':''}">${dts[i]}<br><span class="dn">${d}</span></th>`).join('')+'</tr>';
   return '<div style="overflow:auto"><table class="xl">'+hd+st.map(s=>'<tr'+(s.id==me&&M=='g'?' style="outline:3px solid #facc15;outline-offset:-3px"':'')+'><td class="nmc">'+esc(nice(s.name).toLocaleUpperCase('tr'))+'</td>'+DAYS.map((d,i)=>{const c=shiftCell(s.sh&&s.sh[i]);return `<td class="c ${i==td?'tdy':''}" style="background:${c.bg}">${c.a}</td>`;}).join('')+'</tr>').join('')+'</table></div>';
 }
-async function renderPg(){
+let CSUB='ort';
+window.setSub=x=>{CSUB=x;renderPg(true);};
+async function renderPg(cache){
   const v=PGV,my=++PRQ,adm=M=='y',b=(f,x,c)=>`<button class="a ${c||'ed'}" onclick="${f}">${x}</button>`;
   let title='',acts='',body='',per='';
   const perBar=(k,g,G)=>adm?'<div class="pers">'+G.map(x=>`<button class="${g&&x.k==g.k?'on':''}" data-p="${esc(x.k)}" onclick="setPer('${k}',this.dataset.p)">${esc(x.k)} · ${x.rows.length}</button>`).join('')+'</div>':(g?`<div class="perl">Son yüklenen dönem: <b>${esc(g.k)}</b> · ${new Date(g.t).toLocaleDateString('tr-TR')}</div>`:'');
   try{
     if(v=='ciro'||v=='bira'){
-      const bi=v=='bira';PC[v]=grp(await(bi?fBira():fCiro()));const G=PC[v],g=selG(v),L=g?g.rows.slice().sort((a,c)=>bi?c.qty-a.qty:c.ort-a.ort):[];
-      const T=bi?await tgt():0;title=bi?'🍺 Bira Satışı':'📊 Ciro Ortalama';per=perBar(v,g,G);
+      const bi=v=='bira';
+      if(!(cache&&PC[v].length))PC[v]=grp(await(bi?fBira():fCiro()));
+      const G=PC[v],g=selG(v),L=g?g.rows.slice():[];
+      const T=bi?((cache&&window.__T)?window.__T:(window.__T=await tgt())):0;
+      title=bi?'🍺 Bira Satışı':'📊 Ciro & Ortalama';per=perBar(v,g,G);
       acts=b(`pgXls('${v}')`,'⬇ Excel','')+(adm?(bi?b('beerPick()','📷 Görselleri yükle')+b('beerManual()','✍ Elle'):b('rptPick()','📷 Rapor yükle')+b('rptManual()','✍ Elle'))+(g?b(`movPer('${v}')`,'🔀 Dönemi taşı')+b(`delPer('${v}')`,'🗑 Dönemi sil','off'):'')+(bi?b('setTgt()','🎯 Hedef: '+T):''):'');
-      body=L.length?(bi?lbBira(L,adm,T):lbCiro(L,adm)):'<p class="sub" style="padding:10px">Bu şube için henüz kayıt yok.</p>';
-    }else{title='🗓️ Haftalık Vardiya';acts=b("pgXls('vard')",'⬇ Excel','')+(adm?b('shiftUp()','📅 Excel yapıştır')+b('shiftPick()','📷 Görsel')+b('shiftClr()','🗑 Temizle','off'):'');body=vardHtml();}
+      const seg=bi?'':`<div class="seg"><button class="${CSUB=='ort'?'on':''}" onclick="setSub('ort')">📊 Ortalama</button><button class="${CSUB=='ciro'?'on':''}" onclick="setSub('ciro')">💰 Ciro</button></div>`;
+      body=seg+(L.length?(bi?lbBira(L.sort((a,c)=>c.qty-a.qty),adm,T):lbCiro(L,adm,CSUB)):'<p class="sub" style="padding:10px">Bu şube için henüz kayıt yok.</p>');
+    }else{
+      title='🗓️ Haftalık Vardiya';
+      const si=await gs('getShiftImg',B).catch(()=>null);window.__shi=(si&&si.img)?si:null;
+      acts=b("pgXls('vard')",'⬇ Excel','')+(adm?b('shImgPick()','🖼 Görsel yükle')+(window.__shi?b('shImgDel()','🗑 Görseli kaldır','off'):'')+b('shiftUp()','📅 Excel yapıştır')+b('shiftPick()','📷 Görselden oku')+b('shiftClr()','🗑 Tabloyu temizle','off'):'');
+      body=(window.__shi?`<div class="simg"><div class="simgh">🖼 Güncel vardiya görseli<span>${new Date(si.t).toLocaleDateString('tr-TR')}</span></div><img src="${si.img}" alt="Vardiya" onclick="showShImg()"><div class="simgt">Büyütmek için dokun</div></div>`:'')+vardHtml();
+    }
     if(adm)acts+=b("pgXls('all')",'⬇ Hepsi','an');
   }catch(e){body='<div class="err">'+esc(emsg(e))+'</div>';}
   if(my!==PRQ||PGV!=v)return;
@@ -733,40 +753,73 @@ document.head.appendChild(sty3);
 // ===== Liderlik tabloları (Ciro / Bira) + hedef kotası =====
 const fmt=n=>Number(n).toLocaleString('tr-TR');
 const tgt=async()=>{try{const x=await gs('getTargets');return +x[B+'_bira']||620;}catch(e){return 620;}};
-window.setTgt=async()=>{const cur=await tgt();ask('🎯 Bira hedef kotası · '+BR[B],[{label:'Hedef (adet)',type:'number',val:String(cur)}],async v=>{try{await gs('setTarget',B,'bira',num(v[0]),PIN);PSIG='';pgSync();}catch(e){msg(emsg(e));}},'Kaydet');};
+window.setTgt=async()=>{const cur=await tgt();ask('🎯 Bira hedef kotası · '+BR[B],[{label:'Hedef (adet)',type:'number',val:String(cur)}],async v=>{try{await gs('setTarget',B,'bira',num(v[0]),PIN);window.__T=0;PSIG='';pgSync();}catch(e){msg(emsg(e));}},'Kaydet');};
 window.movPer=k=>{const g=selG(k);if(!g)return;ask('“'+g.k+'” dönemindeki '+g.rows.length+' kayıt hangi döneme taşınsın?\nBaşka bir dönemin adını yazarsan ikisi birleşir.',[{label:'Yeni dönem',val:g.k}],async v=>{try{const n=await gs('movePeriod',k,B,g.k,v[0].trim(),PIN);PSEL[k]=nR(v[0]);msg(n+' kayıt taşındı ✅');rptLoad();}catch(e){msg(emsg(e));}},'Taşı');};
 function podium(it){
   const o=it.length>=3?[1,0,2]:it.length==2?[1,0]:[0],h=[112,86,68],mk=['🥇','🥈','🥉'];
   return '<div class="pod">'+o.map(i=>{const x=it[i];return `<div class="pd g${i+1}"><div class="pm">${i==0?'👑':''}</div><b class="av big">${esc(ini(x.name))}</b><div class="pn">${esc(nice(x.name).split(' ')[0])}</div><div class="pv">${x.val}</div><div class="ps">${x.sub||''}</div><div class="pb" style="height:${h[i]}px">${mk[i]}</div></div>`;}).join('')+'</div>';
 }
-function lbRow(rk,r,main,sub,pct,cls,trend,del,key){
-  return `<div class="lr ${trend?'dn':''}"><span class="rk">${rk}</span><b class="av">${esc(ini(r.name))}</b><div class="lm"><div class="ln">${esc(nice(r.name))}${trend||''}</div><div class="ls">${sub}</div><div class="bar"><i class="${cls}" style="width:${Math.max(5,Math.min(100,pct))}%"></i></div></div><div class="lv">${main}</div>${del?`<button class="x2" data-k="${esc(key)}" onclick="${del}(this.dataset.k)">✕</button>`:''}</div>`;
+function lbRow(rk,r,main,sub,pct,cls,trend,key,adm,kd){
+  return `<div class="lr ${trend&&trend.indexOf('d">')>0?'dn':''}"><span class="rk">${rk}</span><b class="av">${esc(ini(r.name))}</b><div class="lm"><div class="ln">${esc(nice(r.name))}${trend||''}</div><div class="ls">${sub}</div><div class="bar"><i class="${cls}" style="width:${Math.max(5,Math.min(100,pct))}%"></i></div></div><div class="lv">${main}</div>${adm?`<div class="rb"><button class="x2" data-k="${esc(key)}" onclick="${kd=='b'?'editBeer':'editRep'}(this.dataset.k)">✏️</button><button class="x2" data-k="${esc(key)}" onclick="${kd=='b'?'beerDel':'rptDel'}(this.dataset.k)">✕</button></div>`:''}</div>`;
 }
-function lbCiro(L,adm){
-  const n=L.length,mx=L[0].ort||1,tc=L.reduce((a,r)=>a+Number(r.ciro||0),0),th=L.reduce((a,r)=>a+Number(r.hesap||0),0),low=Math.min(4,Math.max(0,n-3));
-  let h='<div class="kp"><div><b>'+tl2(th?tc/th:0)+'</b><span>Takım ortalaması (TL)</span></div><div><b>'+fmt(th)+'</b><span>Toplam hesap</span></div><div><b>'+n+'</b><span>Garson</span></div></div>';
-  h+='<div class="hot">🔥 '+esc(nice(L[0].name))+' zirvede! Sıralamada yükselmek için hesap başına ortalamanı artır.</div>';
-  h+=podium(L.slice(0,3).map(r=>({name:r.name,val:tl2(r.ort)+' TL',sub:fmt(r.hesap)+' hesap'})));
+function lbCiro(L,adm,sub){
+  const ci=sub=='ciro',val=r=>Number(ci?r.ciro:r.ort);L=L.slice().sort((a,b)=>val(b)-val(a));
+  const n=L.length,mx=val(L[0])||1,tc=L.reduce((a,r)=>a+Number(r.ciro||0),0),th=L.reduce((a,r)=>a+Number(r.hesap||0),0),low=Math.min(4,Math.max(0,n-3)),avg=th?tc/th:0;
+  const top=r=>ci?fmt(Math.round(r.ciro))+' TL':tl2(r.ort)+' TL';
+  let h='<div class="kp">'+(ci?'<div><b>'+fmt(Math.round(tc))+'</b><span>Toplam ciro (TL)</span></div><div><b>'+tl2(avg)+'</b><span>Takım ortalaması</span></div>':'<div><b>'+tl2(avg)+'</b><span>Takım ortalaması (TL)</span></div><div><b>'+fmt(th)+'</b><span>Toplam hesap</span></div>')+'<div><b>'+n+'</b><span>Garson</span></div></div>';
+  h+='<div class="hot">🔥 '+esc(nice(L[0].name))+' zirvede! '+(ci?'Ciroda yükselmek için satışa devam.':'Sıralamada yükselmek için hesap başına ortalamanı artır.')+'</div>';
+  h+=podium(L.slice(0,3).map(r=>({name:r.name,val:top(r),sub:ci?'ort. '+tl2(r.ort)+' TL':fmt(r.hesap)+' hesap'})));
   h+='<div class="lb">'+L.map((r,i)=>{
     if(!adm&&i<3)return '';
-    const rk=i+1,dn=rk>n-low,top=i<3;
-    return lbRow(rk,r,tl2(r.ort)+'<small>TL</small>',fmt(r.hesap)+' hesap'+(i?' · lidere '+tl2(mx-r.ort)+' TL':''),r.ort/mx*100,dn?'r':(top?'g':'o'),dn?'<span class="tr d">▼ Düşüşte</span>':(top?'<span class="tr u">▲ Zirvede</span>':''),adm?'rptDel':'',r.key);
+    const rk=i+1,dn=rk>n-low,tp=i<3;
+    return lbRow(rk,r,(ci?fmt(Math.round(r.ciro)):tl2(r.ort))+'<small>TL</small>',ci?'ort. '+tl2(r.ort)+' TL · '+fmt(r.hesap)+' hesap':fmt(r.hesap)+' hesap'+(i?' · lidere '+tl2(mx-r.ort)+' TL':''),val(r)/mx*100,dn?'r':(tp?'g':'o'),dn?'<span class="tr d">▼ Düşüşte</span>':(tp?'<span class="tr u">▲ Zirvede</span>':''),r.key,adm,'c');
   }).join('')+'</div>';
   return h;
 }
 function lbBira(L,adm,T){
   const n=L.length,tq=L.reduce((a,r)=>a+Number(r.qty||0),0),hit=L.filter(r=>r.qty>=T).length,near=L.filter(r=>r.qty<T)[0];
   let h='<div class="kp"><div><b>'+fmt(T)+'</b><span>Hedef kota</span></div><div><b>'+hit+' / '+n+'</b><span>Hedefe ulaşan</span></div><div><b>'+fmt(tq)+'</b><span>Toplam adet</span></div></div>';
-  h+='<div class="hot">'+(near?'🔥 '+esc(nice(near.name))+' hedefe sadece <b>'+fmt(T-near.qty)+'</b> adet uzaklıkta! Herkes için hedef: '+fmt(T)+' adet':'🎉 Herkes hedefi geçti, tebrikler!')+'</div>';
+  h+='<div class="hot">'+(near?'🔥 '+esc(nice(near.name))+' hedefe sadece <b>'+fmt(T-near.qty)+'</b> adet uzaklıkta! Hedef: '+fmt(T)+' adet':'🎉 Herkes hedefi geçti, tebrikler!')+'</div>';
   const rem=r=>r.qty>=T?'🎉 Hedef tamam (+'+fmt(r.qty-T)+')':'Kalan <b>'+fmt(T-r.qty)+'</b>';
   h+=podium(L.slice(0,3).map(r=>({name:r.name,val:fmt(r.qty)+' adet',sub:rem(r)})));
   h+='<div class="lb">'+L.map((r,i)=>{
     if(!adm&&i<3)return '';
     const p=r.qty/T*100;
-    return lbRow(i+1,r,fmt(r.qty)+'<small>adet</small>',rem(r)+' · hedef '+fmt(T),p,p>=100?'g':(p>=70?'o':'r'),p>=100?'<span class="tr u">✓ Hedef</span>':'',adm?'beerDel':'',r.key);
+    return lbRow(i+1,r,fmt(r.qty)+'<small>adet</small>',rem(r)+' · hedef '+fmt(T),p,p>=100?'g':(p>=70?'o':'r'),p>=100?'<span class="tr u">✓ Hedef</span>':'',r.key,adm,'b');
   }).join('')+'</div>';
   return h;
 }
+// ----- Kaydedilmiş kaydı düzeltme (görselden yanlış okunan rakamlar için) -----
+const rowOf=(k,key)=>{for(const g of PC[k]){const r=g.rows.find(x=>x.key==key);if(r)return {r:r,g:g};}return null;};
+window.editBeer=key=>{
+  const o=rowOf('bira',key);if(!o)return;const r=o.r,g=o.g;
+  ask('✏️ Bira miktarını düzelt',[{label:'Ad Soyad',val:nice(r.name)},{label:'Miktar (wheel hariç)',type:'number',val:String(r.qty)}],async v=>{
+    const nm=v[0].trim(),q=num(v[1]);if(!nm||!(q>=0)){msg('Ad ve miktar gerekli');return;}
+    try{if(nrm(nm)!=nrm(r.name)||!r.range)await gs('delBeer',r.key,PIN);await gs('saveBeer',[{name:nm,qty:q,amt:0,wheel:0}],B,g.k,PIN);PSIG='';rptLoad();msg('Düzeltildi ✅');}catch(e){msg(emsg(e));}
+  },'Kaydet');
+};
+window.editRep=key=>{
+  const o=rowOf('ciro',key);if(!o)return;const r=o.r,g=o.g;
+  ask('✏️ Satış kaydını düzelt',[{label:'Ad Soyad',val:nice(r.name)},{label:'Ciro (TL)',val:tl2(r.ciro)},{label:'Hesap sayısı',type:'number',val:String(r.hesap)}],async v=>{
+    const nm=v[0].trim(),c=num(v[1]),h=num(v[2]);if(!nm||!(c>0)||!(h>0)){msg('Ad, ciro ve hesap sayısı gerekli');return;}
+    try{if(nrm(nm)!=nrm(r.name)||!r.range)await gs('delReport',r.key,PIN);await gs('saveReport',{name:nm,ciro:c,hesap:h,range:g.k,firma:r.firma||'',sube:B},PIN);PSIG='';rptLoad();msg('Düzeltildi ✅');}catch(e){msg(emsg(e));}
+  },'Kaydet');
+};
+// ----- Vardiya görseli: yükle, küçült, Firestore'a yaz, sayfada göster -----
+const shr=(f,w,q)=>new Promise((ok,no)=>{const im=new Image(),u=URL.createObjectURL(f);im.onload=()=>{const s=Math.min(1,w/im.width),c=document.createElement('canvas');c.width=Math.round(im.width*s);c.height=Math.round(im.height*s);c.getContext('2d').drawImage(im,0,0,c.width,c.height);URL.revokeObjectURL(u);ok(c.toDataURL('image/jpeg',q));};im.onerror=no;im.src=u;});
+const SF=document.createElement('input');SF.type='file';SF.accept='image/*';SF.hidden=true;document.body.appendChild(SF);
+window.shImgPick=()=>{SF.value='';SF.click();};
+SF.addEventListener('change',async()=>{
+  const f=SF.files[0];if(!f)return;
+  try{
+    $('st').textContent='🖼 Görsel hazırlanıyor…';let d='';
+    for(const a of [[1500,.72],[1300,.62],[1100,.5],[900,.45]]){d=await shr(f,a[0],a[1]);if(d.length<900000)break;}
+    if(d.length>=900000)throw new Error('Görsel çok büyük, daha küçük bir görsel seçin');
+    await gs('saveShiftImg',B,d,PIN);$('st').textContent='';PSIG='';pgSync();
+  }catch(e){$('st').textContent='';msg(emsg(e));}
+});
+window.shImgDel=()=>ask('Vardiya görseli kaldırılsın mı?',[],async()=>{try{await gs('saveShiftImg',B,'',PIN);PSIG='';pgSync();}catch(e){msg(emsg(e));}},'Kaldır');
+window.showShImg=()=>{if(window.__shi)pop('🖼 Vardiya görseli','<img src="'+window.__shi.img+'" style="width:100%;border-radius:12px">',true);};
 // ----- Toplu rapor yükleme: tüm görseller için ortak dönem -----
 window.rptBatch=async function(files){
   const rows=[];let bad=0;
@@ -789,8 +842,8 @@ window.rptBatch=async function(files){
     },'Kaydet');
 };
 const sty4=document.createElement('style');
-sty4.textContent='.kp{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:0 0 12px}.kp div{background:#172033;border:1px solid rgba(148,163,184,.14);border-radius:14px;padding:10px 6px;text-align:center}.kp b{display:block;font-size:18px}.kp span{font-size:11px;color:#94a3b8}.hot{background:linear-gradient(135deg,#7c2d12,#b45309);border-radius:14px;padding:12px;font-weight:600;font-size:14px;margin:0 0 12px;text-align:center;line-height:1.4}.pod{display:flex;align-items:flex-end;justify-content:center;gap:8px;margin:6px 0 14px}.pd{flex:1;text-align:center;display:flex;flex-direction:column;align-items:center;min-width:0}.pd .pm{height:22px;font-size:18px}.av.big{width:54px;height:54px;font-size:18px;margin:0 0 4px}.pd .pn{font-weight:800;font-size:13px}.pd .pv{font-size:13px;color:#4ade80;font-weight:800}.pd .ps{font-size:11px;color:#fde68a;min-height:14px}.pd .pb{width:100%;margin-top:6px;border-radius:12px 12px 0 0;display:grid;place-items:center;font-size:26px}.g1 .pb{background:linear-gradient(180deg,#f59e0b,#b45309)}.g2 .pb{background:linear-gradient(180deg,#94a3b8,#475569)}.g3 .pb{background:linear-gradient(180deg,#d97706,#78350f)}.lb{display:flex;flex-direction:column;gap:8px}.lr{display:flex;align-items:center;gap:10px;padding:10px;border-radius:16px;background:linear-gradient(160deg,#1f2b42,#162033);border:1px solid rgba(148,163,184,.12)}.lr.dn{border-color:rgba(239,68,68,.55)}.rk{flex:none;width:24px;text-align:center;font-weight:800;color:#94a3b8}.lm{flex:1;min-width:0}.ln{font-weight:700;font-size:14px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}.ls{font-size:12px;color:#94a3b8;margin:2px 0 6px}.bar{height:8px;border-radius:8px;background:#0f172a;overflow:hidden}.bar i{display:block;height:100%;border-radius:8px}.bar i.g{background:linear-gradient(90deg,#16a34a,#4ade80)}.bar i.o{background:linear-gradient(90deg,#f59e0b,#fbbf24)}.bar i.r{background:linear-gradient(90deg,#dc2626,#f87171)}.lv{flex:none;text-align:right;font-weight:800;font-size:15px}.lv small{display:block;font-size:10px;color:#94a3b8;font-weight:600}.tr{font-size:11px;font-weight:800;border-radius:20px;padding:1px 8px}.tr.d{background:#7f1d1d;color:#fecaca}.tr.u{background:#14532d;color:#bbf7d0}.x2{flex:none;border:0;background:#334155;color:#fff;border-radius:8px;width:28px;height:28px}';
+sty4.textContent='.kp{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:0 0 12px}.kp div{background:#172033;border:1px solid rgba(148,163,184,.14);border-radius:14px;padding:10px 6px;text-align:center}.kp b{display:block;font-size:18px}.kp span{font-size:11px;color:#94a3b8}.hot{background:linear-gradient(135deg,#7c2d12,#b45309);border-radius:14px;padding:12px;font-weight:600;font-size:14px;margin:0 0 12px;text-align:center;line-height:1.4}.pod{display:flex;align-items:flex-end;justify-content:center;gap:8px;margin:6px 0 14px}.pd{flex:1;text-align:center;display:flex;flex-direction:column;align-items:center;min-width:0}.pd .pm{height:22px;font-size:18px}.av.big{width:54px;height:54px;font-size:18px;margin:0 0 4px}.pd .pn{font-weight:800;font-size:13px}.pd .pv{font-size:13px;color:#4ade80;font-weight:800}.pd .ps{font-size:11px;color:#fde68a;min-height:14px}.pd .pb{width:100%;margin-top:6px;border-radius:12px 12px 0 0;display:grid;place-items:center;font-size:26px}.g1 .pb{background:linear-gradient(180deg,#f59e0b,#b45309)}.g2 .pb{background:linear-gradient(180deg,#94a3b8,#475569)}.g3 .pb{background:linear-gradient(180deg,#d97706,#78350f)}.lb{display:flex;flex-direction:column;gap:8px}.lr{display:flex;align-items:center;gap:10px;padding:10px;border-radius:16px;background:linear-gradient(160deg,#1f2b42,#162033);border:1px solid rgba(148,163,184,.12)}.lr.dn{border-color:rgba(239,68,68,.55)}.rk{flex:none;width:24px;text-align:center;font-weight:800;color:#94a3b8}.lm{flex:1;min-width:0}.ln{font-weight:700;font-size:14px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}.ls{font-size:12px;color:#94a3b8;margin:2px 0 6px}.bar{height:8px;border-radius:8px;background:#0f172a;overflow:hidden}.bar i{display:block;height:100%;border-radius:8px}.bar i.g{background:linear-gradient(90deg,#16a34a,#4ade80)}.bar i.o{background:linear-gradient(90deg,#f59e0b,#fbbf24)}.bar i.r{background:linear-gradient(90deg,#dc2626,#f87171)}.lv{flex:none;text-align:right;font-weight:800;font-size:15px}.lv small{display:block;font-size:10px;color:#94a3b8;font-weight:600}.tr{font-size:11px;font-weight:800;border-radius:20px;padding:1px 8px}.tr.d{background:#7f1d1d;color:#fecaca}.tr.u{background:#14532d;color:#bbf7d0}.x2{flex:none;border:0;background:#334155;color:#fff;border-radius:8px;width:30px;height:30px}.rb{display:flex;flex-direction:column;gap:4px}.seg{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:0 0 12px}.seg button{border:1px solid rgba(148,163,184,.25);background:#172033;color:#cbd5e1;border-radius:14px;padding:11px;font-weight:700}.seg button.on{background:linear-gradient(135deg,#3b82f6,#6d28d9);color:#fff;border-color:transparent}.simg{margin:0 0 14px;border-radius:16px;overflow:hidden;background:#0f172a;border:1px solid rgba(148,163,184,.18)}.simgh{display:flex;justify-content:space-between;padding:10px 12px;font-weight:700;font-size:13px}.simgh span{color:#94a3b8;font-weight:600}.simg img{display:block;width:100%;max-height:340px;object-fit:cover;object-position:top}.simgt{padding:6px;text-align:center;font-size:11px;color:#94a3b8}';
 document.head.appendChild(sty4);
-var hs = document.querySelector('.hs'); if (hs) hs.textContent += ' · v8';   // yeni dosyanın yüklendiğini göstermek için
+var hs = document.querySelector('.hs'); if (hs) hs.textContent += ' · v9';   // yeni dosyanın yüklendiğini göstermek için
 });
 })();
