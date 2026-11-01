@@ -460,6 +460,16 @@ const API = {
   },
   async getVoice(id) { const d = await col('voice').doc(id).get(); return d.exists ? d.data() : null; },
   async delVoice(id, pin) { auth_(pin); await col('voice').doc(id).delete(); await upd_(id, s => { s.hasVoice = false; s.voiceT = 0; }); return 'ok'; },
+  async sendRadio(to, sube, data, pin) {   // telsiz: kısa ses kaydı + çağrı bildirimi
+    auth_(pin);
+    if (sube !== 'opt' && sube !== 'mavi') throw new Error('Şube geçersiz');
+    if (typeof data !== 'string' || !/^data:audio\/(wav|x-wav|wave);base64,/.test(data) || data.length > 700000) throw new Error('Kayıt geçersiz ya da çok uzun');
+    const all = to === 'all', T = Date.now();
+    await col('radio').doc(all ? 'all_' + sube : to).set({ a: data, t: T, from: 'Yönetici' });
+    const st = (await allStaff_()).filter(s => all ? (s.branch === sube && !s.off) : s.id === to);
+    await Promise.all(st.map(s => post_(topicOf_(s.id), '📻 Telsiz çağrısı', 'Yönetici seni telsizden çağırıyor. Uygulamayı aç.')));
+    return { n: st.length };
+  },
   // ---- Başlangıç & Tatlı satış miktarları (garson başına) ----
   async saveCat(rows, sube, range, pin) {
     auth_(pin);
@@ -648,9 +658,9 @@ window.draw=function(){
   if(me&&D.staff.some(s=>s.id==me)){const all=D.staff,s0=all.find(s=>s.id==me);D.staff=all.filter(s=>s.id==me);try{od();}finally{D.staff=all;}
     const left=Math.max(0,D.total-usedOf(s0));
     $('list').insertAdjacentHTML('afterbegin','<div class="hi"><b>'+esc(ini(s0.name))+'</b><div><div class="hi1">Merhaba, '+esc(nice(s0.name).split(' ')[0])+' 👋</div><div class="hi2">'+(s0.shTxt?'🕗 Bugün '+esc(s0.shTxt.replace('-','–'))+' · ':'')+'☕ Kalan mola '+left+' dk</div></div></div>');
-    mbn(s0,me);vFetch(s0);
+    mbn(s0,me);vFetch(s0);radioListen(me);
     return;}
-  head();
+  radioListen('');head();
   const L=D.staff.filter(s=>!s.off).sort((a,b)=>a.name.localeCompare(b.name,'tr')),sig=L.map(s=>s.id).join();
   if($('pks')&&window.__pkSig===sig)return;   // 5 sn'lik yenilemede arama kutusu silinmesin
   window.__pkSig=sig;
@@ -663,7 +673,7 @@ window.head=function(){
   if(M=='g'){
     const me=getMe();
     $('tools').innerHTML=''
-      +(me?'<div class="chipsrow"><button class="pill" onclick="myCode()">🔔 Bildirim kodum</button><button class="pill" onclick="pickMe(\'\')">↩ Kişiyi değiştir</button></div>':'');
+      +(me?'<div class="chipsrow"><button class="pill" onclick="myCode()">🔔 Bildirim kodum</button><button class="pill" onclick="radioMode()">'+(window.__rwl?'📻 Telsiz dinleme: AÇIK':'📻 Telsiz dinle')+'</button><button class="pill" onclick="pickMe(\'\')">↩ Kişiyi değiştir</button></div>':'');
   }else if(M=='y')$('tools').innerHTML='';
 };
 // ----- Görünüm + uygulama simgesi -----
@@ -804,7 +814,7 @@ window.admSet=()=>{
   pop('⚙ Ayarlar','<div class="shg">'+b("code('yonetici','Yönetici')",'📲 Yönetici bildirim kodu')+b("test('yonetici')",'🔔 Test bildirimi','off')+b('tok()','🔑 Ntfy token')+b('shiftClr()','🗑 Bu şubenin vardiyasını temizle','end')+'</div>');
   $('mo').textContent='Kapat';
 };
-const d3=window.draw;window.draw=function(){if(M=='y'&&D){try{admDraw();}catch(e){$('list').innerHTML='<div class="err">'+esc(emsg(e))+'</div>';}pgSync();}else d3();};
+const d3=window.draw;window.draw=function(){if(M=='y')radioListen('');if(M=='y'&&D){try{admDraw();}catch(e){$('list').innerHTML='<div class="err">'+esc(emsg(e))+'</div>';}pgSync();}else d3();};
 const sty3=document.createElement('style');
 sty3.textContent='.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:0 0 12px}.st{border-radius:16px;padding:12px 4px;text-align:center;background:#172033;border:1px solid rgba(148,163,184,.14)}.st b{display:block;font-size:26px;line-height:1.1}.st span{font-size:11px;color:#94a3b8;font-weight:600}.st.b b{color:#60a5fa}.st.g b{color:#4ade80}.st.r{border-color:#ef4444;background:#3b0d12}.st.r b{color:#f87171}.admbar{display:grid;grid-template-columns:1fr 1fr;gap:8px;width:100%}.admbar .a{min-height:48px;border-radius:14px;font-size:14px}.sec2{font-size:12px;font-weight:800;letter-spacing:.1em;color:#94a3b8;margin:14px 2px 8px;display:flex;justify-content:space-between}.sec2 span{background:#334155;color:#e2e8f0;border-radius:20px;padding:0 9px}.rows{display:flex;flex-direction:column;gap:8px}.row{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:16px;background:linear-gradient(160deg,#1f2b42,#162033);border:1px solid rgba(148,163,184,.12)}.av{flex:none;width:42px;height:42px;border-radius:50%;display:grid;place-items:center;background:linear-gradient(135deg,#6366f1,#8b5cf6);font-size:15px}.av.dim{background:#334155;color:#94a3b8}.rm{flex:1;min-width:0}.rn{font-weight:700;font-size:15px}.rs{font-size:12px;color:#94a3b8;margin-top:3px}.bd{display:inline-block;padding:1px 8px;border-radius:20px;font-size:11px;font-weight:700;margin-right:6px}.bd.g{background:#166534;color:#bbf7d0}.bd.n{background:#334155;color:#e2e8f0}.bd.o{background:#b45309;color:#fff}.bd.y{background:#facc15;color:#422006}.more{flex:none;width:42px;height:42px;border-radius:12px;border:0;background:#334155;color:#fff;font-size:20px}.shg{display:grid;gap:8px}.shg .a{width:100%;min-height:48px}#list .card .ib{display:none}.pers{display:flex;gap:8px;overflow:auto;margin:0 0 10px;padding-bottom:4px}.pers button{flex:none;padding:8px 14px;border-radius:999px;border:1px solid rgba(148,163,184,.25);background:#172033;color:#cbd5e1;font-size:12px;font-weight:700}.pers button.on{background:linear-gradient(135deg,#3b82f6,#6d28d9);color:#fff;border-color:transparent}.perl{font-size:13px;color:#cbd5e1;margin:0 2px 10px}';
 document.head.appendChild(sty3);
@@ -1026,7 +1036,7 @@ body>*{position:relative;z-index:1}
 document.head.appendChild(sty5);
 
 // ===== Yönetici araç çubuğu (listenin içinde, kırpılmaz) =====
-function admBar(){return '<div class="admbar"><button class="a" onclick="add()">➕ Personel ekle</button><button class="a x" onclick="reset()">↻ Günü sıfırla</button><button class="a an" onclick="testAnons()">🔊 Anons testi</button><button class="a off" onclick="msgPick()">🔔 Mesaj gönder</button><button class="a ed" onclick="vList()">🎙 İsim kayıtları</button><button class="a x" onclick="admSet()">⚙ Ayarlar</button></div>';}
+function admBar(){return '<div class="admbar"><button class="a an full" style="min-height:58px;font-size:16px" onclick="radioUI()">📻 Telsiz · konuş</button><button class="a" onclick="add()">➕ Personel ekle</button><button class="a x" onclick="reset()">↻ Günü sıfırla</button><button class="a an" onclick="testAnons()">🔊 Anons testi</button><button class="a off" onclick="msgPick()">🔔 Mesaj gönder</button><button class="a ed" onclick="vList()">🎙 İsim kayıtları</button><button class="a x" onclick="admSet()">⚙ Ayarlar</button></div>';}
 window.msgPick=()=>{
   const now=Date.now()+off,rk=s=>s.active?(!s.active.paused&&endOf(s.active)<now?0:1):2,S=D.staff.filter(s=>!s.off).sort((a,b)=>rk(a)-rk(b)||a.name.localeCompare(b.name,'tr'));
   const st=s=>s.active?(!s.active.paused&&endOf(s.active)<now?' · 🔴 mola bitti':' · ☕ molada'):'';
@@ -1061,10 +1071,10 @@ window.playAnons=id=>{
   }catch(e){return null;}
 };
 document.addEventListener('click',()=>{if(window.__au2)return;window.__au2=1;try{AU.muted=true;AU.src=ANS;const p=AU.play();if(p&&p.then)p.then(()=>{AU.pause();AU.currentTime=0;AU.muted=false;}).catch(()=>{AU.muted=false;});}catch(e){}});
-async function toWav(blob){
+async function toWav(blob,sr0){
   const ab=await blob.arrayBuffer(),AC=window.AudioContext||window.webkitAudioContext,ctx=new AC();
   const buf=await new Promise((ok,no)=>ctx.decodeAudioData(ab,ok,no));
-  const sr=16000,oc=new OfflineAudioContext(1,Math.max(1,Math.ceil(buf.duration*sr)),sr),src=oc.createBufferSource();
+  const sr=sr0||16000,oc=new OfflineAudioContext(1,Math.max(1,Math.ceil(buf.duration*sr)),sr),src=oc.createBufferSource();
   src.buffer=buf;src.connect(oc.destination);src.start();
   const d=(await oc.startRendering()).getChannelData(0);
   let a=0,b=d.length-1;const th=0.02;while(a<b&&Math.abs(d[a])<th)a++;while(b>a&&Math.abs(d[b])<th)b--;
@@ -1126,6 +1136,76 @@ window.catBatch=async function(files){
 const sty7=document.createElement('style');
 sty7.textContent='.vrow{display:flex;gap:8px;align-items:center}.vn{flex:1;font-weight:700;font-size:14px}.vn span{display:block;font-size:11px;color:#94a3b8;font-weight:600}.vrow .a{width:auto!important;min-width:48px;padding:10px 14px;min-height:44px}';
 document.head.appendChild(sty7);
-var hs = document.querySelector('.hs'); if (hs) hs.textContent += ' · v14';   // yeni dosyanın yüklendiğini göstermek için
+
+// ===== 📻 Telsiz: yönetici konuşur, personelde ses otomatik çalar + telefona çağrı bildirimi =====
+const RA=new Audio();
+document.addEventListener('click',()=>{if(window.__ra2)return;window.__ra2=1;try{RA.muted=true;RA.src=ANS;const p=RA.play();if(p&&p.then)p.then(()=>{RA.pause();RA.currentTime=0;RA.muted=false;}).catch(()=>{RA.muted=false;});}catch(e){}});
+let RR=null;
+window.radioUI=()=>{
+  const S=D.staff.filter(s=>!s.off).sort((a,b)=>a.name.localeCompare(b.name,'tr'));
+  pop('📻 Telsiz · '+BR[B],'<p class="sub" style="margin:0 0 10px;line-height:1.5">Kime konuşacaksın? Konuş\'a bas, söyleyeceğini söyle, tekrar basıp gönder (en çok 12 sn).</p><select id="rto" class="rsel"><option value="all">📢 Tüm personel</option>'+S.map(s=>`<option value="${s.id}">${esc(nice(s.name))}</option>`).join('')+'</select><button id="rbt" class="a an rbig" onclick="radioTalk()">🎙 Konuş</button><div id="rst" class="sub" style="margin-top:10px;text-align:center"></div>');
+  $('mo').textContent='Kapat';
+  $('mo').onclick=()=>{$('ov').hidden=true;if(RR){RR.cancel=1;try{RR.mr.stop();}catch(e){}}};
+};
+window.radioTalk=async()=>{
+  const stt=$('rst'),btn=$('rbt');
+  if(RR){try{RR.mr.stop();}catch(e){}return;}
+  if(!navigator.mediaDevices||!window.MediaRecorder){stt.textContent='Bu tarayıcı ses kaydını desteklemiyor';return;}
+  let stream;try{stream=await navigator.mediaDevices.getUserMedia({audio:true});}catch(e){stt.textContent='Mikrofon izni verilmedi';return;}
+  const ch=[],mr=new MediaRecorder(stream),to=$('rto').value;let tm=null,sec=0;
+  RR={mr:mr,cancel:0};
+  mr.ondataavailable=e=>{if(e.data&&e.data.size)ch.push(e.data);};
+  mr.onstop=async()=>{
+    clearInterval(tm);stream.getTracks().forEach(t=>t.stop());
+    const cancelled=RR&&RR.cancel;RR=null;
+    const b=$('rbt');if(b){b.textContent='🎙 Konuş';b.classList.remove('rec');}
+    if(cancelled||!ch.length)return;
+    try{
+      if($('rst'))$('rst').textContent='Gönderiliyor…';
+      const wav=await toWav(new Blob(ch,{type:mr.mimeType||'audio/webm'}),11025);
+      const r=await gs('sendRadio',to,B,wav,PIN);
+      if($('rst'))$('rst').textContent='✅ Gönderildi · '+r.n+' kişiye çağrı bildirimi gitti';
+    }catch(e){if($('rst'))$('rst').textContent='⚠ '+emsg(e);}
+  };
+  mr.start();btn.classList.add('rec');btn.textContent='⏹ Bitir ve gönder (0 sn)';stt.textContent='Konuşabilirsin…';
+  tm=setInterval(()=>{sec++;const b=$('rbt');if(b)b.textContent='⏹ Bitir ve gönder ('+sec+' sn)';if(sec>=12){try{mr.stop();}catch(e){}}},1000);
+};
+function rbn(){
+  let el=document.getElementById('rdo');if(!el){el=document.createElement('div');el.id='rdo';el.className='rdo';document.body.appendChild(el);}
+  el.innerHTML='<b>📻 Telsiz mesajı</b><button onclick="radioAgain()">▶ Dinle</button><button onclick="document.getElementById(\'rdo\').remove()">✕</button>';
+  clearTimeout(window.__rt);window.__rt=setTimeout(()=>{const e=document.getElementById('rdo');if(e)e.remove();},30000);
+}
+function radioPlay(m){
+  window.__rlast=m;
+  try{navigator.vibrate&&navigator.vibrate([300,150,300]);}catch(e){}
+  try{RA.pause();RA.muted=false;RA.volume=1;RA.src=m.a;const p=RA.play();if(p&&p.catch)p.catch(()=>{});}catch(e){}
+  rbn();
+}
+window.radioAgain=()=>{const m=window.__rlast;if(!m)return;try{RA.pause();RA.src=m.a;RA.play();}catch(e){}};
+window.radioListen=me=>{
+  const key=me?me+'|'+B:'';
+  if(window.__rid===key)return;
+  (window.__runs||[]).forEach(f=>{try{f();}catch(e){}});window.__runs=[];window.__rid=key;
+  if(!me)return;
+  [me,'all_'+B].forEach(id=>{
+    window.__runs.push(col('radio').doc(id).onSnapshot(d=>{
+      if(!d.exists)return;const m=d.data();if(!m||!m.a)return;
+      let seen=0;try{seen=+(localStorage.getItem('mola_radio_'+id)||0);}catch(e){}
+      if(m.t<=seen)return;
+      try{localStorage.setItem('mola_radio_'+id,String(m.t));}catch(e){}
+      if(Date.now()-m.t<120000)radioPlay(m);   // eski mesaj otomatik çalmaz
+    },()=>{}));
+  });
+};
+window.radioMode=async()=>{
+  const want=!window.__rwl,ok=await wake(want);
+  window.__rwl=want&&ok;
+  msg(want?(ok?'📻 Telsiz dinleme açık.\nEkran açık kalır, telsiz çağrılarını duyarsın. Telefonu şarjda tut ve bu sayfayı kapatma.':'Ekran açık tutulamadı. Telefon ayarlarından ekran zaman aşımını uzat.'):'Telsiz dinleme kapatıldı');
+  head();
+};
+const sty8=document.createElement('style');
+sty8.textContent='.rsel{width:100%;padding:12px;border-radius:12px;background:#0f172a;color:#fff;border:1px solid #475569;font-size:16px;margin-bottom:12px}.rbig{width:100%;min-height:76px;font-size:20px;border-radius:18px}.rbig.rec{background:#dc2626;animation:rpulse 1s infinite}@keyframes rpulse{50%{opacity:.65}}.rdo{position:fixed;left:12px;right:12px;top:12px;z-index:30;background:linear-gradient(135deg,#7c3aed,#4c1d95);border-radius:16px;padding:12px 14px;display:flex;align-items:center;gap:10px;box-shadow:0 10px 30px rgba(0,0,0,.5)}.rdo b{flex:1}.rdo button{border:0;border-radius:10px;padding:8px 12px;font-weight:700}';
+document.head.appendChild(sty8);
+var hs = document.querySelector('.hs'); if (hs) hs.textContent += ' · v15';   // yeni dosyanın yüklendiğini göstermek için
 });
 })();
