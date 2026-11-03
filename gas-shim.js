@@ -76,7 +76,6 @@ function parseCell_(c) {
   return f(h1, i1) + '-' + f(h2, i2);
 }
 function opts_(s) {
-  // 11:00-20:00 arası çay ve yemek molası aynı anda seçilebilir; her türün toplam hakkı sıradaki mola sürelerinin toplamıdır
   const r = [], md = md_(), seq = CFG.SEQ[s.branch] || CFG.SEQ.opt, seen = {};
   if (md >= CFG.MAIN.from * 60 && md < CFG.MAIN.to * 60) seq.forEach(q => {
     if (seen[q.k]) return; seen[q.k] = 1;
@@ -100,8 +99,6 @@ const todayLbl_ = () => new Date().toLocaleDateString('tr-TR', { timeZone: TZ })
 const msgOf_ = (s, a) => `${nice_(s.name)} (${branchName_(s.branch)}) - ${a.dur} dk ${a.n} süresi doldu!`;
 
 // ---------- Firestore ----------
-// Personel listesi canlı dinlenir: her 5 sn'lik yenileme bellekten okur, Firestore'dan sadece DEĞİŞEN belgeler okunur
-// (eski sürüm her yenilemede tüm personeli okuyup günlük 50.000 okuma kotasını dolduruyordu)
 let CACHE = [], CERR = null;
 const snapReady = new Promise(res => {
   const sub = () => ready.then(() => col('staff').onSnapshot(q => {
@@ -128,7 +125,6 @@ async function upd_(id, fn) {
     return s;
   });
 }
-// Şubesi kayıtlı olmayan eski raporların şubesini personel listesinden bulur
 async function reports_() {
   const rs = (await col('reports').get()).docs.map(d => d.data()), st = await allStaff_();
   rs.forEach(r => { if (!r.sube) { const s = st.find(x => norm_(x.name) === norm_(r.name)); if (s) r.sube = s.branch; } });
@@ -195,7 +191,7 @@ const API = {
     return { now: Date.now(), names: names_(), total: total_(branch), staff: staff };
   },
   async checkPin(pin) { return checkPin_(pin); },
-  async getTopic(id, pin) { if (id === 'yonetici') auth_(pin); return topicOf_(id); },   // personel kendi kodunu şifresiz alır
+  async getTopic(id, pin) { if (id === 'yonetici') auth_(pin); return topicOf_(id); },
   async saveToken(token, pin) {
     auth_(pin);
     const t = String(token || '').trim();
@@ -334,10 +330,6 @@ const API = {
     await col('staff').doc(id).delete(); await col('hist').doc(id).delete();
     if (s) await cancelActive_(s);
   },
-  // ---- Vardiya: Excel'den yapıştırma ----
-  // Desteklenen biçimler:
-  //  1) Her gün iki sütun (başlangıç, bitiş) + altında istasyon kodu satırı (isim sütunu boş)
-  //  2) Her gün tek sütun: 08:00-16:00
   async uploadShift(branch, text, pin) {
     auth_(pin);
     const staff = (await allStaff_()).filter(s => s.branch === branch), got = {}, codes = {}, missing = [];
@@ -348,9 +340,7 @@ const API = {
     String(text || '').split(/\r?\n/).forEach(line => {
       if (!line.trim()) return;
       const parts = split(line), name = parts[0], cells = parts.slice(1);
-      if (!name) {   // isim boş = istasyon kodu satırı (T1, S4...)
-        return;
-      }
+      if (!name) return;
       const s = staff.find(x => norm_(x.name) === norm_(name));
       const pair = cells.length >= 12 && cells.some(c => tm(c)) && !cells.some(c => /[-–—]/.test(c));
       const week = [];
@@ -394,7 +384,6 @@ const API = {
       if (old) await cancelActive_(old);
     }
   },
-  // ---- Satış raporu: şubeye göre ayrı ----
   async saveReport(d, pin) {
     auth_(pin);
     const name = String(d.name || '').trim(), ciro = Number(d.ciro), hesap = Number(d.hesap), sube = d.sube;
@@ -412,7 +401,6 @@ const API = {
     return (await reports_()).map(r => ({ name: r.name, sube: r.sube, range: r.range, ciro: r.ciro, hesap: r.hesap, ort: r.ort })).sort((a, b) => b.ort - a.ort);
   },
   async delReport(key, pin) { auth_(pin); await col('reports').doc(key).delete(); },
-  // ---- Bira satışı (Personel Ürün Satış Raporu): garson başına miktar, wheel hariç ----
   async saveBeer(rows, sube, range, pin) {
     auth_(pin);
     if (sube !== 'opt' && sube !== 'mavi') throw new Error('Şube geçersiz');
@@ -429,14 +417,14 @@ const API = {
   async listBeer(pin) { auth_(pin); return (await col('beer').get()).docs.map(d => d.data()).sort((a, b) => b.qty - a.qty); },
   async listBeerPub() { return (await col('beer').get()).docs.map(d => { const r = d.data(); return { key: r.key, sube: r.sube, name: r.name, range: r.range, qty: r.qty, amt: r.amt }; }).sort((a, b) => b.qty - a.qty); },
   async delBeer(key, pin) { auth_(pin); await col('beer').doc(key).delete(); },
-  async notifyStaff(id, text, pin) {   // yönetici → personel mesajı (ntfy + uygulama içi)
+  async notifyStaff(id, text, pin) {
     auth_(pin);
     const txt = String(text || '').trim().slice(0, 200) || 'Molan bitti, işe dön!';
     await upd_(id, s => { s.msg = { text: txt, t: Date.now() }; });
     const r = await post_(topicOf_(id), '📣 Yönetici mesajı', txt);
     return { ok: r.ok, err: r.err || '' };
   },
-  async notifyBranch(sube, text, pin) {   // şubedeki tüm personele mesaj
+  async notifyBranch(sube, text, pin) {
     auth_(pin);
     if (sube !== 'opt' && sube !== 'mavi') throw new Error('Şube geçersiz');
     const txt = String(text || '').trim().slice(0, 200);
@@ -450,7 +438,7 @@ const API = {
     }
     return { n: st.length, ok: ok };
   },
-  async saveVoice(id, data, pin) {   // yöneticinin kendi sesiyle kaydettiği isim anonsu
+  async saveVoice(id, data, pin) {
     auth_(pin);
     if (typeof data !== 'string' || !/^data:audio\/(wav|x-wav|wave);base64,/.test(data) || data.length > 600000) throw new Error('Kayıt geçersiz ya da çok uzun');
     const T = Date.now();
@@ -460,7 +448,7 @@ const API = {
   },
   async getVoice(id) { const d = await col('voice').doc(id).get(); return d.exists ? d.data() : null; },
   async delVoice(id, pin) { auth_(pin); await col('voice').doc(id).delete(); await upd_(id, s => { s.hasVoice = false; s.voiceT = 0; }); return 'ok'; },
-  async sendRadio(to, sube, data, pin) {   // telsiz: kısa ses kaydı + çağrı bildirimi
+  async sendRadio(to, sube, data, pin) {
     auth_(pin);
     if (sube !== 'opt' && sube !== 'mavi') throw new Error('Şube geçersiz');
     if (typeof data !== 'string' || !/^data:audio\/(wav|x-wav|wave);base64,/.test(data) || data.length > 700000) throw new Error('Kayıt geçersiz ya da çok uzun');
@@ -470,7 +458,7 @@ const API = {
     await Promise.all(st.map(s => post_(topicOf_(s.id), '📻 Telsiz çağrısı', 'Yönetici seni telsizden çağırıyor. Uygulamayı aç.')));
     return { n: st.length };
   },
-  async saveAiReport(sube, title, cols, rj, notes, pin) {   // yapay zekanın hazırladığı tablo (herkes görür)
+  async saveAiReport(sube, title, cols, rj, notes, pin) {
     auth_(pin);
     if (sube !== 'opt' && sube !== 'mavi') throw new Error('Şube geçersiz');
     if (!Array.isArray(cols) || !cols.length || typeof rj !== 'string' || rj.length > 200000) throw new Error('Rapor geçersiz');
@@ -480,7 +468,6 @@ const API = {
   },
   async listAiReports() { return (await col('aireports').get()).docs.map(d => d.data()).sort((a, b) => b.t - a.t); },
   async delAiReport(id, pin) { auth_(pin); await col('aireports').doc(id).delete(); },
-  // ---- Başlangıç & Tatlı satış miktarları (garson başına) ----
   async saveCat(rows, sube, range, pin) {
     auth_(pin);
     if (sube !== 'opt' && sube !== 'mavi') throw new Error('Şube geçersiz');
@@ -515,7 +502,6 @@ const API = {
     await col('cfg').doc('targets').set({ [sube + '_' + kind]: v }, { merge: true });
     return v;
   },
-  // Bir dönemdeki tüm kayıtları başka bir döneme taşır (iki dönemi birleştirmek için)
   async movePeriod(kind, sube, from, to, pin) {
     auth_(pin);
     const c = kind === 'ciro' ? 'reports' : (kind === 'cat' ? 'cat' : 'beer'), dst = normR_(to);
@@ -552,8 +538,6 @@ function chain_() {
 window.google = { script: { get run() { return chain_(); } } };
 
 // ---------- Bira raporu okuma düzeltmesi ----------
-// index.html'deki ocrW ve beerPages, sayfa yüklendikten sonra bunlarla değiştirilir:
-// seyrek metin modu (PSM 11) ile tablo satırları tam okunur; garson blokları sütun konumlarından ve toplam satırlarından bulunur.
 window.addEventListener('load', function () {
 window.ocrW = async function (f) {
   if (typeof Tesseract === 'undefined') throw new Error('Okuma modülü yüklenemedi');
@@ -565,7 +549,6 @@ window.ocrW = async function (f) {
     return { text: r.data.text || '', W: (r.data.words || []).filter(w => w && w.text && w.text.trim() && w.bbox).map(w => ({ t: w.text.trim(), x0: w.bbox.x0, x: (w.bbox.x0 + w.bbox.x1) / 2, y: (w.bbox.y0 + w.bbox.y1) / 2, h: w.bbox.y1 - w.bbox.y0 })) };
   } finally { try { await wk.terminate(); } catch (e) {} }
 };
-// Bira raporu ayrıştırıcı (sütun konumlarına dayanır; ürün kodu/sicil no okunamasa da çalışır)
 window.beerPages=function(pages,st){
   const warn=[],ev=[],qre=/^\d{1,3}(?:\.\d{3})*,\d{3}$/,are=/^\d{1,3}(?:\.\d{3})*,\d{2}$/;
   const fix=t=>(/^[\dOo.,]+$/.test(t)&&/\d/.test(t))?t.replace(/[Oo]/g,'0'):t;
@@ -590,7 +573,6 @@ window.beerPages=function(pages,st){
       const t=l.w.sort((a,b)=>a.x0-b.x0),left=t.filter(w=>w.x0<codeX),right=t.filter(w=>w.x0>=codeX);
       const code=right.find(w=>/^\D?\d{7}\D?$/.test(w.t)),br=right.some(isBr);
       const q=right.filter(w=>qre.test(w.t)).pop(),a=right.filter(w=>are.test(w.t)).pop(),qv=q?num(q.t):NaN;
-      // garson adı (sicil no + ad); sicil no ya da kayıtlı personel eşleşmesi şart
       const idw=left.find(w=>/\d{2}-\d{1,3}/.test(w.t)),txt=left.map(w=>letters(w.t.replace(/^[^A-Za-zÇĞİÖŞÜçğıöşü]*\d{2}-\d{1,3}/,''))).filter(x=>x.length>=2).join(' '),s=match(txt);
       if(idw||s)ev.push({k:'name',name:s?s.name:(txt.length>=3?nice(txt):'?'),known:!!s});
       if(code||br){
@@ -635,7 +617,7 @@ window.beerBatch=async function(files){
     pages.push({W:o.W,text:o.text,n:m?+m[1]:null,i:i});
   }
   $('st').textContent='';OCRL='📖 Görsel okunuyor…';
-  pages.sort((a,b)=>(a.n!=null&&b.n!=null)?a.n-b.n:a.i-b.i);   // "Sayfa n/m" numarasına göre sırala
+  pages.sort((a,b)=>(a.n!=null&&b.n!=null)?a.n-b.n:a.i-b.i);
   const ns=pages.map(p=>p.n).filter(x=>x!=null),r=beerPages(pages,(D&&D.staff)||[]);
   if(ns.some((n,i)=>i&&n!=ns[i-1]+1))r.warn.push('Sayfa numaraları ardışık değil, eksik sayfa olabilir');
   if(!r.rows.length){msg('Görsellerde garson toplamı okunamadı.\nSicil no (37-4), garson adı ve Miktar sütunu görünecek şekilde, rapor sayfalarının tamamını yükleyin.'+(r.warn.length?'\n\n'+r.warn.join('\n'):''));return;}
@@ -672,7 +654,7 @@ window.draw=function(){
     return;}
   radioListen('');head();
   const L=D.staff.filter(s=>!s.off).sort((a,b)=>a.name.localeCompare(b.name,'tr')),sig=L.map(s=>s.id).join();
-  if($('pks')&&window.__pkSig===sig)return;   // 5 sn'lik yenilemede arama kutusu silinmesin
+  if($('pks')&&window.__pkSig===sig)return;
   window.__pkSig=sig;
   $('list').innerHTML='<div class="pk"><div class="pkh">👤 Kim olduğunu seç<span>'+L.length+' kişi</span></div><input id="pks" class="pks" placeholder="🔎 Adını yaz…" oninput="pkFilter(this.value)" autocomplete="off">'
     +'<div class="pkg">'+L.map(s=>`<button class="pkc" data-n="${esc(nrm(s.name))}" onclick="pickMe('${s.id}')"><b>${esc(ini(s.name))}</b><span>${esc(nice(s.name))}</span></button>`).join('')+'</div>'
@@ -686,7 +668,6 @@ window.head=function(){
       +(me?'<div class="chipsrow"><button class="pill" onclick="myCode()">🔔 Bildirim kodum</button><button class="pill" onclick="radioMode()">'+(window.__rwl?'📻 Telsiz dinleme: AÇIK':'📻 Telsiz dinle')+'</button><button class="pill" onclick="pickMe(\'\')">↩ Kişiyi değiştir</button></div>':'');
   }else if(M=='y')$('tools').innerHTML='';
 };
-// ----- Görünüm + uygulama simgesi -----
 const sty=document.createElement('style');
 sty.textContent='.tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;width:100%}.tiles button{border:1px solid rgba(148,163,184,.18);border-radius:18px;padding:14px 4px;background:linear-gradient(160deg,#1f2b42,#162033);color:#e2e8f0;font-weight:700;font-size:13px;line-height:1.25;box-shadow:0 6px 16px rgba(0,0,0,.28);display:flex;flex-direction:column;align-items:center;gap:6px}.tiles i{font-style:normal;font-size:26px}.tiles button:active{transform:scale(.97)}.pill{border:1px solid rgba(148,163,184,.25);background:rgba(148,163,184,.1);color:#e2e8f0;border-radius:999px;padding:10px 16px;font-weight:600;font-size:13px}.chipsrow{display:flex;gap:8px;flex-wrap:wrap;width:100%}.pkh{font-weight:800;font-size:16px;display:flex;justify-content:space-between;align-items:center;margin:4px 2px}.pkh span{font-size:12px;color:#94a3b8;font-weight:600}.pks{width:100%;padding:13px 14px;border-radius:14px;border:1px solid #334155;background:#0f172a;color:#fff;font-size:16px;margin:8px 0 12px}.pkg{display:grid;grid-template-columns:1fr 1fr;gap:10px}.pkc{display:flex;align-items:center;gap:10px;text-align:left;padding:10px;border-radius:16px;border:1px solid rgba(148,163,184,.15);background:linear-gradient(160deg,#1f2b42,#162033);color:#f1f5f9;font-size:14px;font-weight:600;box-shadow:0 4px 12px rgba(0,0,0,.25)}.pkc b{flex:none;width:38px;height:38px;border-radius:50%;display:grid;place-items:center;background:linear-gradient(135deg,#6366f1,#8b5cf6);font-size:14px}.pkc span{line-height:1.2;word-break:break-word}.card{border-radius:20px}#list .btns .a{min-height:56px;font-size:16px}';
 document.head.appendChild(sty);
@@ -784,7 +765,7 @@ async function renderPg(cache){
 }
 const d2=window.draw;window.draw=function(){d2();pgSync();};
 const orl=window.rptLoad;window.rptLoad=function(){orl();if(PGV!='mola'){PSIG='';setTimeout(pgSync,900);}};
-// ----- Bildirim kurulumu: tek dokunuşla ntfy -----
+// ----- Bildirim kurulumu -----
 window.myCode=()=>google.script.run.withFailureHandler(e=>msg(emsg(e))).withSuccessHandler(c=>{
   pop('🔔 Mola bildirimi','<p style="margin:0 0 10px;line-height:1.5">Molan bitince telefonuna bildirim gelsin:</p><ol style="padding-left:20px;line-height:1.6;margin:0 0 12px"><li>Telefonuna <b>ntfy</b> uygulamasını kur.</li><li>Aşağıdaki düğmeye bas ya da kodu uygulamada <b>+</b> ile ekle.</li></ol><div style="background:#0f172a;border-radius:12px;padding:12px;font-family:monospace;word-break:break-all;margin-bottom:10px">'+esc(c)+'</div><a class="a" style="margin-bottom:8px" href="ntfy://ntfy.sh/'+encodeURIComponent(c)+'">📲 ntfy\'de aç</a><button class="a ed" style="width:100%" onclick="try{navigator.clipboard.writeText(\''+c+'\');this.textContent=\'✓ Kopyalandı\';}catch(e){}">Kodu kopyala</button>');
   $('mo').textContent='Kapat';
@@ -872,7 +853,6 @@ function lbBira(L,adm,T){
   }).join('')+'</div>';
   return h;
 }
-// ----- Kaydedilmiş kaydı düzeltme (görselden yanlış okunan rakamlar için) -----
 const rowOf=(k,key)=>{for(const g of PC[k]){const r=g.rows.find(x=>x.key==key);if(r)return {r:r,g:g};}return null;};
 window.editBeer=key=>{
   const o=rowOf('bira',key);if(!o)return;const r=o.r,g=o.g;
@@ -888,7 +868,6 @@ window.editRep=key=>{
     try{if(nrm(nm)!=nrm(r.name)||!r.range)await gs('delReport',r.key,PIN);await gs('saveReport',{name:nm,ciro:c,hesap:h,range:g.k,firma:r.firma||'',sube:B},PIN);PSIG='';rptLoad();msg('Düzeltildi ✅');}catch(e){msg(emsg(e));}
   },'Kaydet');
 };
-// ----- Vardiya görseli: yükle, küçült, Firestore'a yaz, sayfada göster -----
 const shr=(f,w,q)=>new Promise((ok,no)=>{const im=new Image(),u=URL.createObjectURL(f);im.onload=()=>{const s=Math.min(1,w/im.width),c=document.createElement('canvas');c.width=Math.round(im.width*s);c.height=Math.round(im.height*s);c.getContext('2d').drawImage(im,0,0,c.width,c.height);URL.revokeObjectURL(u);ok(c.toDataURL('image/jpeg',q));};im.onerror=no;im.src=u;});
 const SF=document.createElement('input');SF.type='file';SF.accept='image/*';SF.hidden=true;document.body.appendChild(SF);
 window.shImgPick=()=>{SF.value='';SF.click();};
@@ -903,7 +882,6 @@ SF.addEventListener('change',async()=>{
 });
 window.shImgDel=()=>ask('Vardiya görseli kaldırılsın mı?',[],async()=>{try{await gs('saveShiftImg',B,'',PIN);PSIG='';pgSync();}catch(e){msg(emsg(e));}},'Kaldır');
 window.showShImg=()=>{if(window.__shi)pop('🖼 Vardiya görseli','<img src="'+window.__shi.img+'" style="width:100%;border-radius:12px">',true);};
-// ----- Toplu rapor yükleme: tüm görseller için ortak dönem -----
 window.rptBatch=async function(files){
   const rows=[];let bad=0;
   for(let i=0;i<files.length;i++){
@@ -932,14 +910,13 @@ document.head.appendChild(sty4);
 let CATSUB='bas';
 window.setCs=x=>{CATSUB=x;renderPg(true);};
 const tgtK=async k=>{try{const x=await gs('getTargets');return +x[B+'_'+k]||0;}catch(e){return 0;}};
-// Başlangıç / Tatlı raporu (Personel × Kategori): her garson için "Miktar" sütunu okunur
 function catParse(W,st){
   const NR=/^\d{1,3}(?:\.\d{3})*,\d{2}$/,PR=/^\d{1,3}(?:\.\d{3})*,\d{2}/,out=[],NL=/^\d{1,3}(?:\.\d{3})*,\d{1,2}$/;
   const hs=W.map(w=>w.h).sort((a,b)=>a-b),H=hs[hs.length>>1]||12;
   const mk=W.filter(w=>{const n=nrm(w.t);return n=='miktar'||(n.length>=5&&n.length<=7&&lev(n,'miktar')<=1);}).sort((a,b)=>a.y-b.y);
   if(!mk.length)return out;
   const cl=[];mk.forEach(w=>{const c=cl.find(k=>Math.abs(k.y-w.y)<H*1.5);if(c)c.w.push(w);else cl.push({y:w.y,w:[w]});});
-  const best=cl.sort((p,q)=>q.w.length-p.w.length||q.y-p.y)[0],hy=best.y,ms=best.w.sort((a,b)=>a.x0-b.x0);   // başlıktaki "Miktar ve Tutarlara Göre" yazısı değil, sütun başlıkları
+  const best=cl.sort((p,q)=>q.w.length-p.w.length||q.y-p.y)[0],hy=best.y,ms=best.w.sort((a,b)=>a.x0-b.x0);
   const G=ms.map((m,i)=>({a:m.x0-14,b:i+1<ms.length?ms[i+1].x0-14:1e9}));
   const inG=(w,g)=>w.x>=g.a&&w.x<g.b;
   const RX={b:/baslangic|2004/,t:/tatli|2015/,r:/biralar|2301/};
@@ -1026,7 +1003,7 @@ window.beerBatch=async function(files){
   }
   $('st').textContent='';OCRL='📖 Görsel okunuyor…';
   const list=Object.keys(rows).map(k=>rows[k]),pm=txt.join(' ').match(/Tarih\s+Aral\S{2,4}\s*:\s*([\d.]+\s*-\s*[\d.]+)/i);let per=pm?pm[1].replace(/\s+/g,''):'';
-  if(!per)per=await defPer('bira');   // tarih görselde yoksa mevcut son döneme eklenir
+  if(!per)per=await defPer('bira');
   if(list.length){
     const sum=list.reduce((a,r)=>a+r.qty,0),ok=grand!=null&&Math.abs(sum-grand)<0.5;
     beerForm(list.map(r=>r.name+';'+String(r.qty).replace('.',',')).join('\n'),B,'🍺 Okunan bira satışı · '+BR[B]+'\n'+list.length+' garson · toplam '+fmt(sum)+(grand!=null?(ok?' · ✓ rapordaki Genel Toplam ('+fmt(grand)+') ile tuttu':'\n⚠ Rapordaki Genel Toplam '+fmt(grand)+' ile tutmuyor, eksik ya da yanlış satır olabilir'):'')+absentTxt(list)+'\nSatır: Ad;Miktar',per);
@@ -1049,7 +1026,7 @@ body>*{position:relative;z-index:1}
 .mbn{background:linear-gradient(135deg,#7c2d12,#b45309);border:1px solid rgba(251,191,36,.55);border-radius:18px;padding:14px;margin:0 0 12px;display:grid;gap:8px;box-shadow:0 8px 24px rgba(0,0,0,.35)}`;
 document.head.appendChild(sty5);
 
-// ===== Yönetici araç çubuğu (listenin içinde, kırpılmaz) =====
+// ===== Yönetici araç çubuğu =====
 function admBar(){return '<div class="admbar"><button class="a an full" style="min-height:58px;font-size:16px" onclick="radioUI()">📻 Telsiz · konuş</button><button class="a ed full" onclick="aiUI()">🤖 Yapay zeka · rapor oluştur</button><button class="a" onclick="add()">➕ Personel ekle</button><button class="a x" onclick="reset()">↻ Günü sıfırla</button><button class="a an" onclick="testAnons()">🔊 Anons testi</button><button class="a off" onclick="msgPick()">🔔 Mesaj gönder</button><button class="a ed" onclick="vList()">🎙 İsim kayıtları</button><button class="a x" onclick="admSet()">⚙ Ayarlar</button></div>';}
 window.msgPick=()=>{
   const now=Date.now()+off,rk=s=>s.active?(!s.active.paused&&endOf(s.active)<now?0:1):2,S=D.staff.filter(s=>!s.off).sort((a,b)=>rk(a)-rk(b)||a.name.localeCompare(b.name,'tr'));
@@ -1064,10 +1041,9 @@ const sty6=document.createElement('style');
 sty6.textContent='.admbar{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:0 0 12px;position:relative;z-index:2}.admbar .a{min-height:50px;border-radius:14px;font-size:14px;width:100%}.admbar .full{grid-column:1/-1}.more.bell{background:#7c3aed;margin-left:6px}.row .more{flex:none}';
 document.head.appendChild(sty6);
 
-// Görselde tarih aralığı yoksa kayıt, şubenin en son dönemine eklenir (yeni döneme ayrılıp listeyi bölmesin)
 async function defPer(k){try{const L=await(k=='bira'?fBira():(k=='cat'?fCat():fCiro()));const G=grp(L);return G[0]?G[0].k:'';}catch(e){return '';}}
 
-// ===== İsim anonsu: yönetici personelin adını kendi sesiyle kaydeder =====
+// ===== İsim anonsu =====
 const VK=id=>'mola_voice_'+id;
 const vGet=id=>{try{return JSON.parse(localStorage.getItem(VK(id))||'null');}catch(e){return null;}};
 window.vFetch=async s=>{
@@ -1151,7 +1127,7 @@ const sty7=document.createElement('style');
 sty7.textContent='.vrow{display:flex;gap:8px;align-items:center}.vn{flex:1;font-weight:700;font-size:14px}.vn span{display:block;font-size:11px;color:#94a3b8;font-weight:600}.vrow .a{width:auto!important;min-width:48px;padding:10px 14px;min-height:44px}';
 document.head.appendChild(sty7);
 
-// ===== 📻 Telsiz: yönetici konuşur, personelde ses otomatik çalar + telefona çağrı bildirimi =====
+// ===== 📻 Telsiz =====
 const RA=new Audio();
 document.addEventListener('click',()=>{if(window.__ra2)return;window.__ra2=1;try{RA.muted=true;RA.src=ANS;const p=RA.play();if(p&&p.then)p.then(()=>{RA.pause();RA.currentTime=0;RA.muted=false;}).catch(()=>{RA.muted=false;});}catch(e){}});
 let RR=null;
@@ -1207,7 +1183,7 @@ window.radioListen=me=>{
       let seen=0;try{seen=+(localStorage.getItem('mola_radio_'+id)||0);}catch(e){}
       if(m.t<=seen)return;
       try{localStorage.setItem('mola_radio_'+id,String(m.t));}catch(e){}
-      if(Date.now()-m.t<120000)radioPlay(m);   // eski mesaj otomatik çalmaz
+      if(Date.now()-m.t<120000)radioPlay(m);
     },()=>{}));
   });
 };
@@ -1221,7 +1197,7 @@ const sty8=document.createElement('style');
 sty8.textContent='.rsel{width:100%;padding:12px;border-radius:12px;background:#0f172a;color:#fff;border:1px solid #475569;font-size:16px;margin-bottom:12px}.rbig{width:100%;min-height:76px;font-size:20px;border-radius:18px}.rbig.rec{background:#dc2626;animation:rpulse 1s infinite}@keyframes rpulse{50%{opacity:.65}}.rdo{position:fixed;left:12px;right:12px;top:12px;z-index:30;background:linear-gradient(135deg,#7c3aed,#4c1d95);border-radius:16px;padding:12px 14px;display:flex;align-items:center;gap:10px;box-shadow:0 10px 30px rgba(0,0,0,.5)}.rdo b{flex:1}.rdo button{border:0;border-radius:10px;padding:8px 12px;font-weight:700}';
 document.head.appendChild(sty8);
 
-// ===== 🤖 Yapay zeka (Gemini) · yalnızca yönetici; kaydedilen raporları herkes görür/indirir =====
+// ===== 🤖 Yapay zeka (Gemini) Entegrasyonu =====
 const GK='mola_gemini_key',GMK='mola_gemini_model',GP='mola_ai_prompt';
 const gKey=()=>{try{return localStorage.getItem(GK)||'';}catch(e){return '';}};
 const AIP0='Ürünleri gruplara ayır (Bira, Kokteyl, Kahve, Tatlı, Başlangıç, Yemek, Diğer) ve her personel için grup bazında Miktar toplamlarını çıkar. Son sütun Toplam olsun.';
@@ -1230,29 +1206,31 @@ window.aiKey=()=>ask('🔑 Gemini API anahtarı\naistudio.google.com/apikey adre
   try{localStorage.setItem(GK,k);localStorage.removeItem(GMK);}catch(e){}
   msg('Anahtar kaydedildi ✅');
 },'Kaydet');
-async function gCall(key,parts){
-  let ms=[];try{ms=JSON.parse(localStorage.getItem(GMK)||'[]');}catch(e){}
-  if(!ms.length){
-    const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=200&key='+encodeURIComponent(key));
-    if(!r.ok)throw new Error(r.status==400||r.status==403?'Gemini anahtarı geçersiz. ⚙ Ayarlar → 🔑 Gemini anahtarı ile yeniden gir.':'Gemini erişim hatası ('+r.status+')');
-    const j=await r.json(),ok=x=>(x.supportedGenerationMethods||[]).indexOf('generateContent')>=0,nm=x=>x.name.replace('models/',''),ver=x=>parseFloat((nm(x).match(/gemini-([\d.]+)-flash/)||[0,0])[1]);
-    ms=(j.models||[]).filter(x=>ok(x)&&/^gemini-[\d.]+-flash$/i.test(nm(x))).sort((a,b)=>ver(b)-ver(a)).slice(0,3).map(nm);
-    if(!ms.length)ms=(j.models||[]).filter(x=>ok(x)&&/flash/i.test(x.name)).slice(0,3).map(nm);
-    if(!ms.length)throw new Error('Uygun bir Gemini modeli bulunamadı');
-    try{localStorage.setItem(GMK,JSON.stringify(ms));}catch(e){}
+
+// --- Gemini 1.5 Flash Modelini Doğrudan Çağıran Güncellenmiş Fonksiyon ---
+async function gCall(key, parts) {
+  const modelName = 'gemini-1.5-flash';
+  const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + modelName + ':generateContent?key=' + encodeURIComponent(key), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ role: 'user', parts: parts }],
+      generationConfig: { temperature: 0.1, responseMimeType: 'application/json' }
+    })
+  });
+  
+  const j = await r.json().catch(() => ({}));
+  if (r.ok) {
+    const p = (((j.candidates || [])[0] || {}).content || {}).parts;
+    if (!p) throw new Error('Gemini boş yanıt döndürdü' + (j.promptFeedback ? ' (içerik engellendi)' : ''));
+    return p.map(x => x.text || '').join('');
   }
-  let last='';
-  for(const m of ms){
-    const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+m+':generateContent?key='+encodeURIComponent(key),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{role:'user',parts:parts}],generationConfig:{temperature:0.1,responseMimeType:'application/json'}})});
-    const j=await r.json().catch(()=>({}));
-    if(r.ok){const p=(((j.candidates||[])[0]||{}).content||{}).parts;if(!p)throw new Error('Gemini boş yanıt döndürdü'+(j.promptFeedback?' (içerik engellendi)':''));return p.map(x=>x.text||'').join('');}
-    last=(j.error&&j.error.message)||('HTTP '+r.status);
-    if(r.status==429)throw new Error('Gemini kullanım sınırına takıldı. Birkaç dakika sonra tekrar dene.');
-    if(r.status!=404&&r.status!=403)break;
-  }
-  try{localStorage.removeItem(GMK);}catch(e){}
-  throw new Error('Gemini hatası: '+last);
+  
+  const last = (j.error && j.error.message) || ('HTTP ' + r.status);
+  if (r.status === 429) throw new Error('Gemini kullanım sınırına takıldı. Birkaç dakika sonra tekrar dene.');
+  throw new Error('Gemini hatası: ' + last);
 }
+
 const aiPrompt=u=>'Sen bir restoran satış raporu analiz asistanısın. Ekli görseller bir kasa programının "Personel Ürün Satış Raporu" sayfalarıdır: her personelin sicil no ve adı, altında ürün no, ürün adı, şube adı, Miktar ve Tutar sütunları ve her personelin sonunda sarı toplam satırı vardır. Sayfalar aynı personelin satırlarını devam ettirebilir.\n\nKullanıcının isteği: '+u+'\n\nKurallar:\n- Yalnızca görselde gerçekten yazan sayıları kullan, tahmin etme. Okunamayan değer için null yaz.\n- Aksi istenmedikçe Miktar sütununu topla (Tutar değil).\n- Tutarı 0,00 olan "WHELL KMPNY" (Wheel kampanyası) satırlarını Bira grubuna katma; "Wheel" adlı ayrı bir sütunda göster.\n- Aynı kişi birden çok sayfada geçiyorsa tek satırda birleştir; personel adlarını düzgün Türkçe yaz.\n- Ürünleri ürün adına bakarak mantıklı gruplara ayır. Hangi ürünün hangi gruba girdiği "notes" alanında kısaca yazsın.\n- Rapordaki sarı toplam satırıyla karşılaştır, tutarsızlık varsa "notes" alanında belirt.\n\nYanıtı yalnızca şu JSON biçiminde ver, başka metin yazma: {"title":"kısa rapor adı","columns":["Personel","Grup1","Grup2","Toplam"],"rows":[["Ad Soyad",1,2,3]],"notes":"kısa açıklama"}';
 function aiTable(j){
   const cell=v=>typeof v=='number'?fmt(v):(v==null?'':esc(v));
@@ -1297,6 +1275,6 @@ window.repDel=id=>ask('Bu rapor silinsin mi?',[],async()=>{try{await gs('delAiRe
 const sty9=document.createElement('style');
 sty9.textContent='.nv{grid-template-columns:repeat(6,1fr)!important;gap:5px!important}.nv button{font-size:10px!important;padding:9px 0!important}.rb2{display:flex;gap:6px}.x2.w{width:38px;height:38px;font-size:16px}';
 document.head.appendChild(sty9);
-var hs = document.querySelector('.hs'); if (hs) hs.textContent += ' · v16';   // yeni dosyanın yüklendiğini göstermek için
+var hs = document.querySelector('.hs'); if (hs) hs.textContent += ' · v16';
 });
 })();
