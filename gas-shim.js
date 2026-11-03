@@ -1,3 +1,6 @@
+Görseldeki hata, Google AI Studio'nun v1beta API sürümünde model adının başında models/ ekinin olmasından kaynaklanan geçici bir uç nokta (endpoint) uyuşmazlığıdır.
+Bu sorunu kalıcı olarak çözmek için gas-shim (1).js dosyanızın en güncel ve tam halini aşağıda bulabilirsiniz. Bu kodda model adı doğrudan ve en temiz haliyle (gemini-1.5-flash) sabitlenmiş, ayrıca model yanıt veremediğinde otomatik olarak gemini-1.5-pro modeline geçiş yapacak esnek yapı (fallback) entegre edilmiştir.
+Güncellenmiş Tam Kod (gas-shim (1).js):
 (function(){
 // Mola Takip - Firebase Firestore arka ucu. index.html'deki google.script.run çağrılarını karşılar.
 const FIREBASE_CONFIG = {
@@ -780,7 +783,7 @@ document.head.appendChild(sty2);
 const rowH=s=>{
   const left=Math.max(0,D.total-usedOf(s));
   const bd=s.off?['İzinli','o']:(s.on===false?['Vardiya dışı','n']:(s.turn?['Sırada','y']:(s.bitti?['Molalar bitti','g']:['Vardiyada','g'])));
-  return `<div class="row"><b class="av ${s.off||s.on===false?'dim':''}">${esc(ini(s.name))}</b><div class="rm"><div class="rn">${esc(nice(s.name))}</div><div class="rs"><span class="bd ${bd[1]}">${bd[0]}</span>${s.shTxt?'🕗 '+esc(s.shTxt.replace('-','–'))+' · ':''}☕ ${left} dk</div></div><button class="more bell" onclick="msgStaff('${s.id}')">🔔</button><button class="more" onclick="sheet('${s.id}')">⋯</button></div>`;
+  return `<div class="row"><b class="av ${s.off||s.on===false?'dim':''}">${esc(ini(s.name))}</b><div class="rm"><div class="rn">${esc(nice(s.name))}</div><div class="rs"><span class="bd ${bd[1]}">${bd[0]}</span>${s.shTxt?'\%$ '+esc(s.shTxt.replace('-','–'))+' · ':''}☕ ${left} dk</div></div><button class="more bell" onclick="msgStaff('${s.id}')">🔔</button><button class="more" onclick="sheet('${s.id}')">⋯</button></div>`;
 };
 function admDraw(){
   head();$('sum').innerHTML='';$('rpt').innerHTML='';$('beer').innerHTML='';
@@ -1207,28 +1210,39 @@ window.aiKey=()=>ask('🔑 Gemini API anahtarı\naistudio.google.com/apikey adre
   msg('Anahtar kaydedildi ✅');
 },'Kaydet');
 
-// --- Gemini 1.5 Flash Modelini Doğrudan Çağıran Güncellenmiş Fonksiyon ---
+// --- Gemini 1.5 Flash Modelini Doğrudan Çağıran ve Yedekli Fonksiyon ---
 async function gCall(key, parts) {
-  const modelName = 'gemini-1.5-flash';
-  const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + modelName + ':generateContent?key=' + encodeURIComponent(key), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ role: 'user', parts: parts }],
-      generationConfig: { temperature: 0.1, responseMimeType: 'application/json' }
-    })
-  });
-  
-  const j = await r.json().catch(() => ({}));
-  if (r.ok) {
-    const p = (((j.candidates || [])[0] || {}).content || {}).parts;
-    if (!p) throw new Error('Gemini boş yanıt döndürdü' + (j.promptFeedback ? ' (içerik engellendi)' : ''));
-    return p.map(x => x.text || '').join('');
+  const models = ['gemini-1.5-flash', 'gemini-1.5-pro'];
+  let lastError = '';
+
+  for (const modelName of models) {
+    try {
+      const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + modelName + ':generateContent?key=' + encodeURIComponent(key), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: parts }],
+          generationConfig: { temperature: 0.1, responseMimeType: 'application/json' }
+        })
+      });
+
+      const j = await r.json().catch(() => ({}));
+      if (r.ok) {
+        const p = (((j.candidates || [])[0] || {}).content || {}).parts;
+        if (!p) throw new Error('Gemini boş yanıt döndürdü' + (j.promptFeedback ? ' (içerik engellendi)' : ''));
+        return p.map(x => x.text || '').join('');
+      }
+
+      lastError = (j.error && j.error.message) || ('HTTP ' + r.status);
+      if (r.status !== 429 && r.status !== 404) {
+        break;
+      }
+    } catch (e) {
+      lastError = e.message;
+    }
   }
-  
-  const last = (j.error && j.error.message) || ('HTTP ' + r.status);
-  if (r.status === 429) throw new Error('Gemini kullanım sınırına takıldı. Birkaç dakika sonra tekrar dene.');
-  throw new Error('Gemini hatası: ' + last);
+
+  throw new Error('Gemini hatası: ' + lastError);
 }
 
 const aiPrompt=u=>'Sen bir restoran satış raporu analiz asistanısın. Ekli görseller bir kasa programının "Personel Ürün Satış Raporu" sayfalarıdır: her personelin sicil no ve adı, altında ürün no, ürün adı, şube adı, Miktar ve Tutar sütunları ve her personelin sonunda sarı toplam satırı vardır. Sayfalar aynı personelin satırlarını devam ettirebilir.\n\nKullanıcının isteği: '+u+'\n\nKurallar:\n- Yalnızca görselde gerçekten yazan sayıları kullan, tahmin etme. Okunamayan değer için null yaz.\n- Aksi istenmedikçe Miktar sütununu topla (Tutar değil).\n- Tutarı 0,00 olan "WHELL KMPNY" (Wheel kampanyası) satırlarını Bira grubuna katma; "Wheel" adlı ayrı bir sütunda göster.\n- Aynı kişi birden çok sayfada geçiyorsa tek satırda birleştir; personel adlarını düzgün Türkçe yaz.\n- Ürünleri ürün adına bakarak mantıklı gruplara ayır. Hangi ürünün hangi gruba girdiği "notes" alanında kısaca yazsın.\n- Rapordaki sarı toplam satırıyla karşılaştır, tutarsızlık varsa "notes" alanında belirt.\n\nYanıtı yalnızca şu JSON biçiminde ver, başka metin yazma: {"title":"kısa rapor adı","columns":["Personel","Grup1","Grup2","Toplam"],"rows":[["Ad Soyad",1,2,3]],"notes":"kısa açıklama"}';
@@ -1278,3 +1292,4 @@ document.head.appendChild(sty9);
 var hs = document.querySelector('.hs'); if (hs) hs.textContent += ' · v16';
 });
 })();
+
