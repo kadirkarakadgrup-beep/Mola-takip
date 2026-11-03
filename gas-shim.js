@@ -470,6 +470,16 @@ const API = {
     await Promise.all(st.map(s => post_(topicOf_(s.id), '📻 Telsiz çağrısı', 'Yönetici seni telsizden çağırıyor. Uygulamayı aç.')));
     return { n: st.length };
   },
+  async saveAiReport(sube, title, cols, rj, notes, pin) {   // yapay zekanın hazırladığı tablo (herkes görür)
+    auth_(pin);
+    if (sube !== 'opt' && sube !== 'mavi') throw new Error('Şube geçersiz');
+    if (!Array.isArray(cols) || !cols.length || typeof rj !== 'string' || rj.length > 200000) throw new Error('Rapor geçersiz');
+    const id = sube + '_' + Date.now();
+    await col('aireports').doc(id).set({ id, sube, title: String(title || 'Rapor').slice(0, 80), cols: cols.map(String).slice(0, 30), rj, notes: String(notes || '').slice(0, 1500), t: Date.now() });
+    return id;
+  },
+  async listAiReports() { return (await col('aireports').get()).docs.map(d => d.data()).sort((a, b) => b.t - a.t); },
+  async delAiReport(id, pin) { auth_(pin); await col('aireports').doc(id).delete(); },
   // ---- Başlangıç & Tatlı satış miktarları (garson başına) ----
   async saveCat(rows, sube, range, pin) {
     auth_(pin);
@@ -685,7 +695,7 @@ document.head.appendChild(sty);
 let PGV='mola',PSIG='',PRQ=0;
 const NV=document.createElement('div');NV.id='nv';NV.className='nv';document.querySelector('.hd').after(NV);
 const PG=document.createElement('div');PG.id='pg';PG.hidden=true;$('beer').after(PG);
-const NAVS=[['mola','🕐','Mola'],['ciro','📊','Ciro'],['bira','🍺','Bira'],['cat','🍰','Başl./Tatlı'],['vard','🗓️','Vardiya']];
+const NAVS=[['mola','🕐','Mola'],['ciro','📊','Ciro'],['bira','🍺','Bira'],['cat','🍰','Tatlı'],['vard','🗓️','Vardiya'],['rep','📁','Rapor']];
 const nvDraw=()=>{NV.innerHTML=NAVS.map(n=>`<button class="${n[0]==PGV?'on':''}" onclick="goPg('${n[0]}')"><i>${n[1]}</i>${n[2]}</button>`).join('');};
 window.goPg=v=>{
   PGV=v;PSIG='';nvDraw();
@@ -750,6 +760,10 @@ async function renderPg(cache){
       acts=b(`pgXls('${v}')`,'⬇ Excel','')+(adm?(bi?b('beerPick()','📷 Görselleri yükle')+b('beerManual()','✍ Elle'):b('rptPick()','📷 Rapor yükle')+b('rptManual()','✍ Elle'))+(g?b(`movPer('${v}')`,'🔀 Dönemi taşı')+b(`delPer('${v}')`,'🗑 Dönemi sil','off'):'')+(bi?b('setTgt()','🎯 Hedef: '+T):''):'');
       const seg=bi?'':`<div class="seg"><button class="${CSUB=='ort'?'on':''}" onclick="setSub('ort')">📊 Ortalama</button><button class="${CSUB=='ciro'?'on':''}" onclick="setSub('ciro')">💰 Ciro</button></div>`;
       body=seg+(L.length?(bi?lbBira(L.sort((a,c)=>c.qty-a.qty),adm,T):lbCiro(L,adm,CSUB)):'<p class="sub" style="padding:10px">Bu şube için henüz kayıt yok.</p>');
+    }else if(v=='rep'){
+      const L=(await gs('listAiReports')).filter(r=>r.sube==B);window.__reps=L;
+      title='📁 Raporlar';acts=adm?b('aiUI()','🤖 Yapay zeka ile oluştur','an'):'';
+      body=L.length?'<div class="lb">'+L.map(r=>`<div class="lr"><b class="av">📊</b><div class="lm"><div class="ln">${esc(r.title)}</div><div class="ls">${new Date(r.t).toLocaleDateString('tr-TR')} · ${(r.cols||[]).length} sütun</div></div><div class="rb2"><button class="x2 w" data-i="${esc(r.id)}" onclick="repOpen(this.dataset.i)">👁</button><button class="x2 w" data-i="${esc(r.id)}" onclick="repXls(this.dataset.i)">⬇</button>${adm?`<button class="x2 w" data-i="${esc(r.id)}" onclick="repDel(this.dataset.i)">✕</button>`:''}</div></div>`).join('')+'</div>':'<p class="sub" style="padding:10px">Henüz kaydedilmiş rapor yok.'+(adm?' 🤖 ile bir tane oluştur.':'')+'</p>';
     }else if(v=='cat'){
       if(!(cache&&PC.cat.length))PC.cat=grp(await fCat());
       const G=PC.cat,g=selG('cat'),ts=CATSUB=='tat',kind=ts?'tatli':'baslangic',lbl=ts?'tatlı':'başlangıç',T=await tgtK(kind);
@@ -811,7 +825,7 @@ window.sheet=id=>{
 };
 window.admSet=()=>{
   const b=(f,x,c)=>`<button class="a ${c||'ed'}" onclick="${cl}${f}">${x}</button>`;
-  pop('⚙ Ayarlar','<div class="shg">'+b("code('yonetici','Yönetici')",'📲 Yönetici bildirim kodu')+b("test('yonetici')",'🔔 Test bildirimi','off')+b('tok()','🔑 Ntfy token')+b('shiftClr()','🗑 Bu şubenin vardiyasını temizle','end')+'</div>');
+  pop('⚙ Ayarlar','<div class="shg">'+b("code('yonetici','Yönetici')",'📲 Yönetici bildirim kodu')+b("test('yonetici')",'🔔 Test bildirimi','off')+b('tok()','🔑 Ntfy token')+b('aiKey()','🔑 Gemini anahtarı')+b('shiftClr()','🗑 Bu şubenin vardiyasını temizle','end')+'</div>');
   $('mo').textContent='Kapat';
 };
 const d3=window.draw;window.draw=function(){if(M=='y')radioListen('');if(M=='y'&&D){try{admDraw();}catch(e){$('list').innerHTML='<div class="err">'+esc(emsg(e))+'</div>';}pgSync();}else d3();};
@@ -1036,7 +1050,7 @@ body>*{position:relative;z-index:1}
 document.head.appendChild(sty5);
 
 // ===== Yönetici araç çubuğu (listenin içinde, kırpılmaz) =====
-function admBar(){return '<div class="admbar"><button class="a an full" style="min-height:58px;font-size:16px" onclick="radioUI()">📻 Telsiz · konuş</button><button class="a" onclick="add()">➕ Personel ekle</button><button class="a x" onclick="reset()">↻ Günü sıfırla</button><button class="a an" onclick="testAnons()">🔊 Anons testi</button><button class="a off" onclick="msgPick()">🔔 Mesaj gönder</button><button class="a ed" onclick="vList()">🎙 İsim kayıtları</button><button class="a x" onclick="admSet()">⚙ Ayarlar</button></div>';}
+function admBar(){return '<div class="admbar"><button class="a an full" style="min-height:58px;font-size:16px" onclick="radioUI()">📻 Telsiz · konuş</button><button class="a ed full" onclick="aiUI()">🤖 Yapay zeka · rapor oluştur</button><button class="a" onclick="add()">➕ Personel ekle</button><button class="a x" onclick="reset()">↻ Günü sıfırla</button><button class="a an" onclick="testAnons()">🔊 Anons testi</button><button class="a off" onclick="msgPick()">🔔 Mesaj gönder</button><button class="a ed" onclick="vList()">🎙 İsim kayıtları</button><button class="a x" onclick="admSet()">⚙ Ayarlar</button></div>';}
 window.msgPick=()=>{
   const now=Date.now()+off,rk=s=>s.active?(!s.active.paused&&endOf(s.active)<now?0:1):2,S=D.staff.filter(s=>!s.off).sort((a,b)=>rk(a)-rk(b)||a.name.localeCompare(b.name,'tr'));
   const st=s=>s.active?(!s.active.paused&&endOf(s.active)<now?' · 🔴 mola bitti':' · ☕ molada'):'';
@@ -1204,8 +1218,4 @@ window.radioMode=async()=>{
   head();
 };
 const sty8=document.createElement('style');
-sty8.textContent='.rsel{width:100%;padding:12px;border-radius:12px;background:#0f172a;color:#fff;border:1px solid #475569;font-size:16px;margin-bottom:12px}.rbig{width:100%;min-height:76px;font-size:20px;border-radius:18px}.rbig.rec{background:#dc2626;animation:rpulse 1s infinite}@keyframes rpulse{50%{opacity:.65}}.rdo{position:fixed;left:12px;right:12px;top:12px;z-index:30;background:linear-gradient(135deg,#7c3aed,#4c1d95);border-radius:16px;padding:12px 14px;display:flex;align-items:center;gap:10px;box-shadow:0 10px 30px rgba(0,0,0,.5)}.rdo b{flex:1}.rdo button{border:0;border-radius:10px;padding:8px 12px;font-weight:700}';
-document.head.appendChild(sty8);
-var hs = document.querySelector('.hs'); if (hs) hs.textContent += ' · v15';   // yeni dosyanın yüklendiğini göstermek için
-});
-})();
+sty8.textContent='.rsel{width:100%;padding:12px;border-radius:12px;background:#0f172a;color:#fff;border:1px solid #475569;font-size:16px;margin-bottom:12px}.rbig{width:100%;min-height:76px;font-size:20px;border-radius:18px}.rbig.rec{background:#dc2626;animation:rpulse 1s infinite}@keyframes rpulse{50%{opacity:.65}}.rdo{position:fixed;left:12px;right:12px;top:12px;z-index:30;background:linear-gradient(135deg,#7c3aed,#4c1d95);border-radius:16px;padding:12px 14px;dis
