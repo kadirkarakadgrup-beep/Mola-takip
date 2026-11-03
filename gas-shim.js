@@ -780,7 +780,7 @@ document.head.appendChild(sty2);
 const rowH=s=>{
   const left=Math.max(0,D.total-usedOf(s));
   const bd=s.off?['İzinli','o']:(s.on===false?['Vardiya dışı','n']:(s.turn?['Sırada','y']:(s.bitti?['Molalar bitti','g']:['Vardiyada','g'])));
-  return `<div class="row"><b class="av ${s.off||s.on===false?'dim':''}">${esc(ini(s.name))}</b><div class="rm"><div class="rn">${esc(nice(s.name))}</div><div class="rs"><span class="bd ${bd[1]}">${bd[0]}</span>${s.shTxt?'\%$ '+esc(s.shTxt.replace('-','–'))+' · ':''}☕ ${left} dk</div></div><button class="more bell" onclick="msgStaff('${s.id}')">🔔</button><button class="more" onclick="sheet('${s.id}')">⋯</button></div>`;
+  return `<div class="row"><b class="av ${s.off||s.on===false?'dim':''}">${esc(ini(s.name))}</b><div class="rm"><div class="rn">${esc(nice(s.name))}</div><div class="rs"><span class="bd ${bd[1]}">${bd[0]}</span>${s.shTxt?'🕗 '+esc(s.shTxt.replace('-','–'))+' · ':''}☕ ${left} dk</div></div><button class="more bell" onclick="msgStaff('${s.id}')">🔔</button><button class="more" onclick="sheet('${s.id}')">⋯</button></div>`;
 };
 function admDraw(){
   head();$('sum').innerHTML='';$('rpt').innerHTML='';$('beer').innerHTML='';
@@ -1207,76 +1207,30 @@ window.aiKey=()=>ask('🔑 Gemini API anahtarı\naistudio.google.com/apikey adre
   msg('Anahtar kaydedildi ✅');
 },'Kaydet');
 
-// --- Gemini 1.5 Flash Modelini Doğrudan v1beta (models/ ön ekiyle) Çağıran Fonksiyon ---
+// --- Gemini çağrısı: güncel modelleri sırayla dener (eski model kalkarsa 404'te sıradakine geçer) ---
 async function gCall(key, parts) {
-  // v1beta sürümünde modeller 'models/gemini-1.5-flash' formatında aranır
-  const modelName = 'models/gemini-1.5-flash';
-  
-  const r = await fetch('https://generativelanguage.googleapis.com/v1beta/' + modelName + ':generateContent?key=' + encodeURIComponent(key), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ role: 'user', parts: parts }],
-      generationConfig: { temperature: 0.1, responseMimeType: 'application/json' }
-    })
-  });
-  
-  const j = await r.json().catch(() => ({}));
-  if (r.ok) {
-    const p = (((j.candidates || [])[0] || {}).content || {}).parts;
-    if (!p) throw new Error('Gemini boş yanıt döndürdü' + (j.promptFeedback ? ' (içerik engellendi)' : ''));
-    return p.map(x => x.text || '').join('');
+  const models = ['gemini-2.5-flash', 'gemini-flash-latest', 'gemini-2.0-flash'];
+  let last = '';
+  for (const m of models) {
+    const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + m + ':generateContent?key=' + encodeURIComponent(key), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ role: 'user', parts: parts }],
+        generationConfig: { temperature: 0.1, responseMimeType: 'application/json' }
+      })
+    });
+    const j = await r.json().catch(() => ({}));
+    if (r.ok) {
+      const p = (((j.candidates || [])[0] || {}).content || {}).parts;
+      if (!p) throw new Error('Gemini boş yanıt döndürdü' + (j.promptFeedback ? ' (içerik engellendi)' : ''));
+      return p.map(x => x.text || '').join('');
+    }
+    last = (j.error && j.error.message) || ('HTTP ' + r.status);
+    if (r.status === 429) throw new Error('Gemini kullanım sınırına takıldı. Birkaç dakika sonra tekrar dene.');
+    if (r.status !== 404) break; // 404 değilse başka model denemenin anlamı yok
   }
-  
-  const last = (j.error && j.error.message) || ('HTTP ' + r.status);
-  if (r.status === 429) throw new Error('Gemini kullanım sınırına takıldı. Birkaç dakika sonra tekrar dene.');
   throw new Error('Gemini hatası: ' + last);
 }
 
-const aiPrompt=u=>'Sen bir restoran satış raporu analiz asistanısın. Ekli görseller bir kasa programının "Personel Ürün Satış Raporu" sayfalarıdır: her personelin sicil no ve adı, altında ürün no, ürün adı, şube adı, Miktar ve Tutar sütunları ve her personelin sonunda sarı toplam satırı vardır. Sayfalar aynı personelin satırlarını devam ettirebilir.\n\nKullanıcının isteği: '+u+'\n\nKurallar:\n- Yalnızca görselde gerçekten yazan sayıları kullan, tahmin etme. Okunamayan değer için null yaz.\n- Aksi istenmedikçe Miktar sütununu topla (Tutar değil).\n- Tutarı 0,00 olan "WHELL KMPNY" (Wheel kampanyası) satırlarını Bira grubuna katma; "Wheel" adlı ayrı bir sütunda göster.\n- Aynı kişi birden çok sayfada geçiyorsa tek satırda birleştir; personel adlarını düzgün Türkçe yaz.\n- Ürünleri ürün adına bakarak mantıklı gruplara ayır. Hangi ürünün hangi gruba girdiği "notes" alanında kısaca yazsın.\n- Rapordaki sarı toplam satırıyla karşılaştır, tutarsızlık varsa "notes" alanında belirt.\n\nYanıtı yalnızca şu JSON biçiminde ver, başka metin yazma: {"title":"kısa rapor adı","columns":["Personel","Grup1","Grup2","Toplam"],"rows":[["Ad Soyad",1,2,3]],"notes":"kısa açıklama"}';
-function aiTable(j){
-  const cell=v=>typeof v=='number'?fmt(v):(v==null?'':esc(v));
-  return '<div style="overflow:auto"><table class="xl xl2"><tr>'+j.columns.map(c=>`<th>${esc(c)}</th>`).join('')+'</tr>'+j.rows.map(r=>'<tr>'+j.columns.map((c,i)=>`<td class="${i?'r':'l'}">${cell(r[i])}</td>`).join('')+'</tr>').join('')+'</table></div>'+(j.notes?'<p class="sub" style="margin:10px 2px;line-height:1.5;white-space:pre-line">ℹ '+esc(j.notes)+'</p>':'');
-}
-function aiXlsx(j){dlX([[String(j.title||'Rapor').replace(/[\\\/?*\[\]:]/g,'-').slice(0,30),[j.columns].concat(j.rows)]],'HappyMoons_'+String(j.title||'Rapor').replace(/[^A-Za-z0-9ğüşöçıİĞÜŞÖÇ]+/g,'_').slice(0,30)+'_'+new Date().toISOString().slice(0,10));}
-const AIF=document.createElement('input');AIF.type='file';AIF.accept='image/*';AIF.multiple=true;AIF.hidden=true;document.body.appendChild(AIF);
-AIF.addEventListener('change',()=>{window.__aif=[...AIF.files];const c=$('aic');if(c)c.textContent='('+AIF.files.length+' görsel)';});
-window.aiPick=()=>{AIF.value='';AIF.click();};
-window.aiUI=()=>{
-  let p=AIP0;try{p=localStorage.getItem(GP)||AIP0;}catch(e){}
-  window.__aif=[];
-  pop('🤖 Yapay zeka ile rapor','<p class="sub" style="margin:0 0 8px;line-height:1.5">Satış raporu görsellerini seç, ne istediğini yaz. Tablo çıkar; Excel\'e aktarabilir ya da garsonlar da indirsin diye kaydedebilirsin.</p><textarea id="aip" class="rsel" rows="5" style="font-size:14px">'+esc(p)+'</textarea><div class="shg"><button class="a ed" onclick="aiPick()">📷 Görselleri seç <span id="aic"></span></button><button class="a an" onclick="aiRun()">🤖 Tabloyu oluştur</button></div><div id="aio" style="margin-top:12px">'+(gKey()?'':'<div class="err">Önce ⚙ Ayarlar → 🔑 Gemini anahtarı ekle.</div>')+'</div>',true);
-  $('mo').textContent='Kapat';
-};
-window.aiRun=async()=>{
-  const out=$('aio'),key=gKey(),fs=window.__aif||[];
-  if(!key){out.innerHTML='<div class="err">Önce ⚙ Ayarlar → 🔑 Gemini anahtarı ekle.</div>';return;}
-  if(!fs.length){out.innerHTML='<div class="err">Önce görselleri seç.</div>';return;}
-  const u=$('aip').value.trim()||AIP0;try{localStorage.setItem(GP,u);}catch(e){}
-  out.innerHTML='<p class="sub">🤖 Gemini çalışıyor… (10-40 sn sürebilir)</p>';
-  try{
-    const parts=[{text:aiPrompt(u)}];
-    for(const f of fs){const d=await shr(f,1600,.82);parts.push({inline_data:{mime_type:'image/jpeg',data:d.split(',')[1]}});}
-    const txt=(await gCall(key,parts)).replace(/^\s*```(?:json)?/i,'').replace(/```\s*$/,'').trim(),j=JSON.parse(txt);
-    if(!Array.isArray(j.columns)||!Array.isArray(j.rows))throw new Error('Yanıt tablo biçiminde değil, isteği biraz değiştirip tekrar dene');
-    window.__air=j;
-    if($('aio'))$('aio').innerHTML=aiTable(j)+'<div class="shg" style="margin-top:10px"><button class="a ed" onclick="aiXlsx(window.__air)">⬇ Excel indir</button><button class="a an" onclick="aiSave()">💾 Garsonlar da görsün (kaydet)</button></div>';
-  }catch(e){if($('aio'))$('aio').innerHTML='<div class="err">'+esc(emsg(e))+'</div>';}
-};
-window.aiXlsx=aiXlsx;
-window.aiSave=()=>{
-  const j=window.__air;if(!j)return;
-  ask('💾 Raporu kaydet · '+BR[B],[{label:'Rapor adı',val:j.title||'Rapor'}],async v=>{
-    try{await gs('saveAiReport',B,v[0].trim()||'Rapor',j.columns,JSON.stringify(j.rows),j.notes||'',PIN);PSIG='';pgSync();msg('Kaydedildi ✅\nGarsonlar "📁 Rapor" sekmesinden görüp Excel indirebilir.');}catch(e){msg(emsg(e));}
-  },'Kaydet');
-};
-const repOf=id=>(window.__reps||[]).find(x=>x.id==id);
-window.repOpen=id=>{const r=repOf(id);if(!r)return;const j={title:r.title,columns:r.cols,rows:JSON.parse(r.rj),notes:r.notes};pop('📊 '+r.title,aiTable(j)+'<button class="a ed" style="width:100%;margin-top:10px" onclick="repXls(\''+id+'\')">⬇ Excel indir</button>',true);$('mo').textContent='Kapat';};
-window.repXls=id=>{const r=repOf(id);if(!r)return;aiXlsx({title:r.title,columns:r.cols,rows:JSON.parse(r.rj)});};
-window.repDel=id=>ask('Bu rapor silinsin mi?',[],async()=>{try{await gs('delAiReport',id,PIN);PSIG='';pgSync();}catch(e){msg(emsg(e));}},'Sil');
-const sty9=document.createElement('style');
-sty9.textContent='.nv{grid-template-columns:repeat(6,1fr)!important;gap:5px!important}.nv button{font-size:10px!important;padding:9px 0!important}.rb2{display:flex;gap:6px}.x2.w{width:38px;height:38px;font-size:16px}';
-document.head.appendChild(sty9);
-var hs = document.querySelector('.hs'); if (hs) hs.textContent += ' · v16';
-});
-})();
+const aiPrompt=u=>'Sen bir restoran satış raporu analiz asistanısın. Ekli görseller bir kasa programının "Personel Ürün Satış Raporu" sayfalarıdır: her personelin sicil no ve adı, altında ürün no, ürün adı, şube adı, Miktar ve Tutar sütunları ve her personelin sonunda sarı toplam satırı vardır. Sayfalar aynı person
