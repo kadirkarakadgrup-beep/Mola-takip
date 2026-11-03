@@ -1207,12 +1207,12 @@ window.aiKey=()=>ask('🔑 Gemini API anahtarı\naistudio.google.com/apikey adre
   msg('Anahtar kaydedildi ✅');
 },'Kaydet');
 
-// --- Gemini v1 API (models/ ön eki gerektirmeyen kararlı sürüm) ---
+// --- Gemini 1.5 Flash Modelini Doğrudan v1beta (models/ ön ekiyle) Çağıran Fonksiyon ---
 async function gCall(key, parts) {
-  const modelName = 'gemini-1.5-pro';
+  // v1beta sürümünde modeller 'models/gemini-1.5-flash' formatında aranır
+  const modelName = 'models/gemini-1.5-flash';
   
-  // v1beta yerine v1 uç noktası kullanılarak models/ ön eki hatasının önüne geçiliyor
-  const r = await fetch('https://generativelanguage.googleapis.com/v1/models/' + modelName + ':generateContent?key=' + encodeURIComponent(key), {
+  const r = await fetch('https://generativelanguage.googleapis.com/v1beta/' + modelName + ':generateContent?key=' + encodeURIComponent(key), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -1251,4 +1251,32 @@ window.aiUI=()=>{
 window.aiRun=async()=>{
   const out=$('aio'),key=gKey(),fs=window.__aif||[];
   if(!key){out.innerHTML='<div class="err">Önce ⚙ Ayarlar → 🔑 Gemini anahtarı ekle.</div>';return;}
-  if(!fs.length){out.innerHTML='<div class="err">Önce görselleri seç.</div>';return
+  if(!fs.length){out.innerHTML='<div class="err">Önce görselleri seç.</div>';return;}
+  const u=$('aip').value.trim()||AIP0;try{localStorage.setItem(GP,u);}catch(e){}
+  out.innerHTML='<p class="sub">🤖 Gemini çalışıyor… (10-40 sn sürebilir)</p>';
+  try{
+    const parts=[{text:aiPrompt(u)}];
+    for(const f of fs){const d=await shr(f,1600,.82);parts.push({inline_data:{mime_type:'image/jpeg',data:d.split(',')[1]}});}
+    const txt=(await gCall(key,parts)).replace(/^\s*```(?:json)?/i,'').replace(/```\s*$/,'').trim(),j=JSON.parse(txt);
+    if(!Array.isArray(j.columns)||!Array.isArray(j.rows))throw new Error('Yanıt tablo biçiminde değil, isteği biraz değiştirip tekrar dene');
+    window.__air=j;
+    if($('aio'))$('aio').innerHTML=aiTable(j)+'<div class="shg" style="margin-top:10px"><button class="a ed" onclick="aiXlsx(window.__air)">⬇ Excel indir</button><button class="a an" onclick="aiSave()">💾 Garsonlar da görsün (kaydet)</button></div>';
+  }catch(e){if($('aio'))$('aio').innerHTML='<div class="err">'+esc(emsg(e))+'</div>';}
+};
+window.aiXlsx=aiXlsx;
+window.aiSave=()=>{
+  const j=window.__air;if(!j)return;
+  ask('💾 Raporu kaydet · '+BR[B],[{label:'Rapor adı',val:j.title||'Rapor'}],async v=>{
+    try{await gs('saveAiReport',B,v[0].trim()||'Rapor',j.columns,JSON.stringify(j.rows),j.notes||'',PIN);PSIG='';pgSync();msg('Kaydedildi ✅\nGarsonlar "📁 Rapor" sekmesinden görüp Excel indirebilir.');}catch(e){msg(emsg(e));}
+  },'Kaydet');
+};
+const repOf=id=>(window.__reps||[]).find(x=>x.id==id);
+window.repOpen=id=>{const r=repOf(id);if(!r)return;const j={title:r.title,columns:r.cols,rows:JSON.parse(r.rj),notes:r.notes};pop('📊 '+r.title,aiTable(j)+'<button class="a ed" style="width:100%;margin-top:10px" onclick="repXls(\''+id+'\')">⬇ Excel indir</button>',true);$('mo').textContent='Kapat';};
+window.repXls=id=>{const r=repOf(id);if(!r)return;aiXlsx({title:r.title,columns:r.cols,rows:JSON.parse(r.rj)});};
+window.repDel=id=>ask('Bu rapor silinsin mi?',[],async()=>{try{await gs('delAiReport',id,PIN);PSIG='';pgSync();}catch(e){msg(emsg(e));}},'Sil');
+const sty9=document.createElement('style');
+sty9.textContent='.nv{grid-template-columns:repeat(6,1fr)!important;gap:5px!important}.nv button{font-size:10px!important;padding:9px 0!important}.rb2{display:flex;gap:6px}.x2.w{width:38px;height:38px;font-size:16px}';
+document.head.appendChild(sty9);
+var hs = document.querySelector('.hs'); if (hs) hs.textContent += ' · v16';
+});
+})();
