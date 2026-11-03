@@ -1,6 +1,3 @@
-Görseldeki hata, Google AI Studio'nun v1beta API sürümünde model adının başında models/ ekinin olmasından kaynaklanan geçici bir uç nokta (endpoint) uyuşmazlığıdır.
-Bu sorunu kalıcı olarak çözmek için gas-shim (1).js dosyanızın en güncel ve tam halini aşağıda bulabilirsiniz. Bu kodda model adı doğrudan ve en temiz haliyle (gemini-1.5-flash) sabitlenmiş, ayrıca model yanıt veremediğinde otomatik olarak gemini-1.5-pro modeline geçiş yapacak esnek yapı (fallback) entegre edilmiştir.
-Güncellenmiş Tam Kod (gas-shim (1).js):
 (function(){
 // Mola Takip - Firebase Firestore arka ucu. index.html'deki google.script.run çağrılarını karşılar.
 const FIREBASE_CONFIG = {
@@ -1064,7 +1061,7 @@ window.playAnons=id=>{
   }catch(e){return null;}
 };
 document.addEventListener('click',()=>{if(window.__au2)return;window.__au2=1;try{AU.muted=true;AU.src=ANS;const p=AU.play();if(p&&p.then)p.then(()=>{AU.pause();AU.currentTime=0;AU.muted=false;}).catch(()=>{AU.muted=false;});}catch(e){}});
-async function toWav(blob,sr0){
+async function tWav(blob,sr0){
   const ab=await blob.arrayBuffer(),AC=window.AudioContext||window.webkitAudioContext,ctx=new AC();
   const buf=await new Promise((ok,no)=>ctx.decodeAudioData(ab,ok,no));
   const sr=sr0||16000,oc=new OfflineAudioContext(1,Math.max(1,Math.ceil(buf.duration*sr)),sr),src=oc.createBufferSource();
@@ -1155,7 +1152,7 @@ window.radioTalk=async()=>{
     if(cancelled||!ch.length)return;
     try{
       if($('rst'))$('rst').textContent='Gönderiliyor…';
-      const wav=await toWav(new Blob(ch,{type:mr.mimeType||'audio/webm'}),11025);
+      const wav=await tWav(new Blob(ch,{type:mr.mimeType||'audio/webm'}),11025);
       const r=await gs('sendRadio',to,B,wav,PIN);
       if($('rst'))$('rst').textContent='✅ Gönderildi · '+r.n+' kişiye çağrı bildirimi gitti';
     }catch(e){if($('rst'))$('rst').textContent='⚠ '+emsg(e);}
@@ -1210,39 +1207,30 @@ window.aiKey=()=>ask('🔑 Gemini API anahtarı\naistudio.google.com/apikey adre
   msg('Anahtar kaydedildi ✅');
 },'Kaydet');
 
-// --- Gemini 1.5 Flash Modelini Doğrudan Çağıran ve Yedekli Fonksiyon ---
+// --- Gemini 1.5 Pro/Flash Modelini Doğrudan v1beta (Öneksiz) Çağıran Fonksiyon ---
 async function gCall(key, parts) {
-  const models = ['gemini-1.5-flash', 'gemini-1.5-pro'];
-  let lastError = '';
-
-  for (const modelName of models) {
-    try {
-      const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + modelName + ':generateContent?key=' + encodeURIComponent(key), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ role: 'user', parts: parts }],
-          generationConfig: { temperature: 0.1, responseMimeType: 'application/json' }
-        })
-      });
-
-      const j = await r.json().catch(() => ({}));
-      if (r.ok) {
-        const p = (((j.candidates || [])[0] || {}).content || {}).parts;
-        if (!p) throw new Error('Gemini boş yanıt döndürdü' + (j.promptFeedback ? ' (içerik engellendi)' : ''));
-        return p.map(x => x.text || '').join('');
-      }
-
-      lastError = (j.error && j.error.message) || ('HTTP ' + r.status);
-      if (r.status !== 429 && r.status !== 404) {
-        break;
-      }
-    } catch (e) {
-      lastError = e.message;
-    }
+  // Doğrudan v1beta uç noktasıyla en kararlı çalışan model adı
+  const modelName = 'gemini-1.5-pro';
+  
+  const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + modelName + ':generateContent?key=' + encodeURIComponent(key), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ role: 'user', parts: parts }],
+      generationConfig: { temperature: 0.1, responseMimeType: 'application/json' }
+    })
+  });
+  
+  const j = await r.json().catch(() => ({}));
+  if (r.ok) {
+    const p = (((j.candidates || [])[0] || {}).content || {}).parts;
+    if (!p) throw new Error('Gemini boş yanıt döndürdü' + (j.promptFeedback ? ' (içerik engellendi)' : ''));
+    return p.map(x => x.text || '').join('');
   }
-
-  throw new Error('Gemini hatası: ' + lastError);
+  
+  const last = (j.error && j.error.message) || ('HTTP ' + r.status);
+  if (r.status === 429) throw new Error('Gemini kullanım sınırına takıldı. Birkaç dakika sonra tekrar dene.');
+  throw new Error('Gemini hatası: ' + last);
 }
 
 const aiPrompt=u=>'Sen bir restoran satış raporu analiz asistanısın. Ekli görseller bir kasa programının "Personel Ürün Satış Raporu" sayfalarıdır: her personelin sicil no ve adı, altında ürün no, ürün adı, şube adı, Miktar ve Tutar sütunları ve her personelin sonunda sarı toplam satırı vardır. Sayfalar aynı personelin satırlarını devam ettirebilir.\n\nKullanıcının isteği: '+u+'\n\nKurallar:\n- Yalnızca görselde gerçekten yazan sayıları kullan, tahmin etme. Okunamayan değer için null yaz.\n- Aksi istenmedikçe Miktar sütununu topla (Tutar değil).\n- Tutarı 0,00 olan "WHELL KMPNY" (Wheel kampanyası) satırlarını Bira grubuna katma; "Wheel" adlı ayrı bir sütunda göster.\n- Aynı kişi birden çok sayfada geçiyorsa tek satırda birleştir; personel adlarını düzgün Türkçe yaz.\n- Ürünleri ürün adına bakarak mantıklı gruplara ayır. Hangi ürünün hangi gruba girdiği "notes" alanında kısaca yazsın.\n- Rapordaki sarı toplam satırıyla karşılaştır, tutarsızlık varsa "notes" alanında belirt.\n\nYanıtı yalnızca şu JSON biçiminde ver, başka metin yazma: {"title":"kısa rapor adı","columns":["Personel","Grup1","Grup2","Toplam"],"rows":[["Ad Soyad",1,2,3]],"notes":"kısa açıklama"}';
@@ -1292,4 +1280,3 @@ document.head.appendChild(sty9);
 var hs = document.querySelector('.hs'); if (hs) hs.textContent += ' · v16';
 });
 })();
-
