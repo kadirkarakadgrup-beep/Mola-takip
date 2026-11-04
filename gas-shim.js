@@ -1280,3 +1280,4 @@ document.head.appendChild(sty9);
 var hs = document.querySelector('.hs'); if (hs) hs.textContent += ' · v17';
 });
 })();
+<script src="ai-rapor.js"></script> 
