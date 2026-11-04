@@ -18,10 +18,10 @@ const RX = [
   ['Kokteyl', /MOJITO|MARGARITA|COSMOPOLITAN|LONG ISLAND|ICE TEA|APEROL|SPRITZ|MARTINI|ZESTY|VELVET|PINA|COLADA|KOKTEYL|NEGRONI|DAIQUIRI|CAIPIRINHA|BLOODY|SOUR|SEX ON|COCKTAIL|SANGRIA|MIMOSA|BELLINI/],
   ['Kahve', /KAHVE|COFFEE|ESPRESSO|LATTE|CAPPUCCINO|AMERICANO|MOCHA|NESCAFE|FRAPPE|MACCHIATO|FLAT WHITE|CORTADO/],
   ['Tatlı', /TATLI|CHEESECAKE|SUFLE|TIRAMISU|BROWNIE|WAFFLE|DONDURMA|SAN SEBASTIAN|PROFITEROL|BAKLAVA|KUNEFE|SUTLAC|TRILECE|CHURROS|PASTA\b|KEK\b|LAVA|FONDANT|MAGNOLIA/],
-  ['Başlangıç', /BASLANGIC|CORBA|SALATA|MEZE|PATATES|SOGAN|NACHOS|CITIR|KANAT|PEYNIR|BRUSCHETTA|HUMMUS|SIGARA|BOREK|ATISTIRMALIK/],
+  ['Başlangıç', /BASLANGIC|CHICKEN|NACOS|NACHOS|MAC AND CHEESE|CHURROS|QUESADILLA|COMBO|FONDU|PARMAK|CORBA|SALATA|MEZE|PATATES|SOGAN|NACHOS|CITIR|KANAT|PEYNIR|BRUSCHETTA|HUMMUS|SIGARA|BOREK|ATISTIRMALIK/],
   ['Yemek', /BURGER|PIZZA|MAKARNA|PENNE|SPAGHETTI|TAVUK|STEAK|BIFTEK|KOFTE|SANDVIC|SANDWICH|DURUM|WRAP|KUZU|KARIDES|BALIK|SNITZEL|PILAV|YEMEK|IZGARA|SOTE|TOST|OMLET|MENEMEN/]
 ];
-const byCode = c => /^2500/.test(c) ? 'Bira' : (/^2512/.test(c) ? 'Kokteyl' : '');
+const byCode = c => /^2500/.test(c) ? 'Bira' : (/^2512/.test(c) ? 'Kokteyl' : (/^2003/.test(c) ? 'Başlangıç' : ''));
 const rule = (code, name) => { const c = byCode(String(code || '')); if (c) return c; const n = fold(name); for (const r of RX) if (r[1].test(n)) return r[0]; return 'Diğer'; };
 
 const known = () => (typeof D !== 'undefined' && D && D.staff) || [];
@@ -33,30 +33,36 @@ const match = n => {
 
 // ---- Gemini: sadece ürün adı listesi gider ----
 async function gem(key, list, note) {
-  const models = ['gemini-2.5-flash', 'gemini-flash-latest', 'gemini-2.0-flash'];
+  const models = ['gemini-2.5-flash', 'gemini-flash-latest', 'gemini-2.0-flash', 'gemini-2.5-flash-lite'];
   const prompt = 'Aşağıda bir restoran/kafe kasa programından ürün adları var. Her ürünü şu gruplardan SADECE birine ata: ' + GR.join(', ') + '. Su, gazlı/gazsız içecek, meyve suyu, sigara vb. "Diğer" olsun.' + (note ? '\nKullanıcı notu: ' + note : '') + '\nYanıtı yalnızca JSON nesnesi olarak ver, anahtar ürün adı (aynen), değer grup: {"ÜRÜN ADI":"Grup"}\n\nÜrünler:\n' + list.join('\n');
   let last = '';
-  for (const m of models) {
-    const gc = { temperature: 0, responseMimeType: 'application/json' };
-    if (m.indexOf('2.5') >= 0) gc.thinkingConfig = { thinkingBudget: 0 };
-    const ac = new AbortController(), to = setTimeout(() => ac.abort(), 40000);
-    let r;
-    try {
-      r = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + m + ':generateContent?key=' + encodeURIComponent(key), {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: ac.signal,
-        body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: gc })
-      });
-    } catch (e) { clearTimeout(to); throw new Error(e.name == 'AbortError' ? 'zaman aşımı' : 'bağlantı kurulamadı'); }
-    clearTimeout(to);
-    const j = await r.json().catch(() => ({}));
-    if (r.ok) {
-      const p = (((j.candidates || [])[0] || {}).content || {}).parts;
-      if (!p) throw new Error('boş yanıt');
-      return JSON.parse(p.map(x => x.text || '').join('').replace(/^\s*```(?:json)?/i, '').replace(/```\s*$/, '').trim());
+  for (let at = 0; at < 3; at++) {
+    let busy = false;
+    for (const m of models) {
+      const gc = { temperature: 0, responseMimeType: 'application/json' };
+      if (m.indexOf('2.5') >= 0) gc.thinkingConfig = { thinkingBudget: 0 };
+      const ac = new AbortController(), to = setTimeout(() => ac.abort(), 40000);
+      let r;
+      try {
+        r = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + m + ':generateContent?key=' + encodeURIComponent(key), {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: ac.signal,
+          body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: gc })
+        });
+      } catch (e) { clearTimeout(to); throw new Error(e.name == 'AbortError' ? 'zaman aşımı' : 'bağlantı kurulamadı'); }
+      clearTimeout(to);
+      const j = await r.json().catch(() => ({}));
+      if (r.ok) {
+        const p = (((j.candidates || [])[0] || {}).content || {}).parts;
+        if (!p) { last = 'boş yanıt'; continue; }
+        try { return JSON.parse(p.map(x => x.text || '').join('').replace(/^\s*```(?:json)?/i, '').replace(/```\s*$/, '').trim()); } catch (e) { last = 'yanıt okunamadı'; continue; }
+      }
+      last = (j.error && j.error.message) || ('HTTP ' + r.status);
+      if (r.status === 429) throw new Error('kullanım sınırı (429), biraz sonra tekrar dene');
+      if (r.status === 503 || r.status === 500) { busy = true; continue; }   // yoğunluk: sıradaki modeli dene
+      if (r.status !== 404) throw new Error(last);
     }
-    last = (j.error && j.error.message) || ('HTTP ' + r.status);
-    if (r.status === 429) throw new Error('kullanım sınırı (429), biraz sonra tekrar dene');
-    if (r.status !== 404) break;
+    if (!busy) break;
+    await new Promise(res => setTimeout(res, 2500));                       // biraz bekle, tekrar dene
   }
   throw new Error(last);
 }
@@ -91,6 +97,7 @@ function parse(pages) {
     let cx = hdr ? hdr.x0 : (codes.length ? codes[codes.length >> 1] : 0);
     if (!cx) { notes.push('Bir sayfada tablo başlığı bulunamadı, o sayfa atlandı'); return; }
     cx -= 8;
+    const sb = mk ? W.filter(w => nrm(w.t) == 'sube' && Math.abs(w.y - mk.y) < mk.h * 1.5)[0] : null, sx = sb ? sb.x0 - 6 : 1e9;
     const topY = mk ? mk.y + mk.h : 0, hs = W.map(w => w.h).sort((a, b) => a - b), H = hs[hs.length >> 1] || 12, L = [];
     W.filter(w => w.y > topY).sort((a, b) => a.y - b.y).forEach(w => {
       const l = L[L.length - 1];
@@ -99,14 +106,12 @@ function parse(pages) {
     let last = null;
     L.forEach(l => {
       const t = l.w.sort((a, b) => a.x0 - b.x0), left = t.filter(w => w.x0 < cx), right = t.filter(w => w.x0 >= cx);
-      const idw = left.find(w => w.t.length <= 8 && /\d{2}-\d{1,3}/.test(w.t));
-      if (idw) {
-        const nm = left.filter(w => w !== idw).map(w => w.t.replace(/[^A-Za-zÇĞİÖŞÜçğıöşü]/g, '')).filter(x => x.length > 1).join(' ');
-        open(); cur.name = nm || '?'; last = null;
-      }
+      const idw = left.find(w => w.t.length <= 8 && /\d{1,2}-\d{1,3}/.test(w.t));
+      const nmL = left.filter(w => w !== idw).map(w => w.t.replace(/[^A-Za-zÇĞİÖŞÜçğıöşü]/g, '')).filter(x => x.length > 1).join(' ');
+      if (idw || nmL.length >= 4) { open(); cur.name = nmL || '?'; last = null; }
       const code = right.find(w => /^\d{7}$/.test(w.t));
       const q = right.filter(w => qre.test(w.t)).pop(), a = right.filter(w => are.test(w.t)).pop();
-      const pn = right.filter(w => w !== code && w !== q && w !== a && BRW.indexOf(nrm(w.t)) < 0).map(w => w.t).join(' ').replace(/\s+/g, ' ').trim();
+      const pn = right.filter(w => w !== code && w !== q && w !== a && w.x0 < sx && !/^(HM|I?ZMIR|1ZMIR|OPTIMUM|OPTIMUN|MAVI|BAHCE)$/.test(fold(w.t))).map(w => w.t).join(' ').replace(/\s+/g, ' ').trim();
       const qv = q ? nu(q.t) : NaN, av = a ? nu(a.t) : NaN;
       if (q && !code && letters(pn) < 2) {                 // sarı toplam satırı
         if (cur && cur.tot == null) cur.tot = qv; else grand = qv;
@@ -197,6 +202,6 @@ window.aiRun = async function () {
   } catch (e) { try { $('st').textContent = ''; } catch (x) {} if (out()) out().innerHTML = '<div class="err" style="white-space:pre-line">' + esc(emsg(e)) + '</div>'; }
 };
 
-const hs = document.querySelector('.hs'); if (hs) hs.textContent += ' · AI3';
+const hs = document.querySelector('.hs'); if (hs) hs.textContent += ' · AI4';
 });
 })();
