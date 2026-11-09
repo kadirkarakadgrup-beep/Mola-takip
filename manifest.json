@@ -1,0 +1,25 @@
+{
+  "name": "Happy Moon's İzmir Şubeler",
+  "short_name": "Happy Moon's",
+  "description": "Happy Moon's İzmir şubeleri personel takip uygulaması",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#7f1d1d",
+  "theme_color": "#7f1d1d",
+  "icons": [
+    {
+      "src": "hm192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "hm192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
