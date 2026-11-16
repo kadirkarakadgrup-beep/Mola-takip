@@ -1,11 +1,12 @@
 {
-  "name": "Happy Moon's Mola Takip",
-  "short_name": "Mola Takip",
+  "name": "Happy Moon's İzmir",
+  "short_name": "Happy Moon's",
+  "description": "Happy Moon's İzmir şubeleri mola ve operasyon takibi",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#7a2420",
+  "background_color": "#12080b",
+  "theme_color": "#7f1d1d",
   "icons": [
     { "src": "hm192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" }
   ]
