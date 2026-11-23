@@ -1566,24 +1566,9 @@ const isoT=o=>new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Istanbul'}).form
 const postaGet=async o=>{const d=isoT(o),k=B+d,c=PCH[k];if(c&&Date.now()-c.t<30000)return;const r=await gs('getPosta',B,d);PCH[k]={t:Date.now(),m:(r&&r.m)||{}};};
 function postaFill(s0){
   if(D.staff.some(s=>s.sec)&&String(s0.sec||'').toLocaleUpperCase('tr').replace(/İ/g,'I').indexOf('SERV')!=0){const e0=$('hipost');if(e0)e0.remove();return;}
-  const paint=()=>{const e=$('hipost');if(!e)return;const f=o=>{const c=PCH[B+isoT(o)];if(!c)return '…';const k=Object.keys(c.m).find(p=>c.m[p]==s0.id);return k||'—';};e.innerHTML='📍 Postan: Bugün <span class="sv2">'+esc(f(0))+'</span> · Yarın <span class="sv2">'+esc(f(1))+'</span> · <span style="text-decoration:underline">📅 Haftalık</span>';e.style.cursor='pointer';e.onclick=()=>window.postaWeek(s0.id);};
+  const paint=()=>{const e=$('hipost');if(!e)return;const f=o=>{const c=PCH[B+isoT(o)];if(!c)return '…';const k=Object.keys(c.m).find(p=>c.m[p]==s0.id);return k||'—';};e.innerHTML='📍 Postan: Bugün <span class="sv2">'+esc(f(0))+'</span> · Yarın <span class="sv2">'+esc(f(1))+'</span>';};
   paint();Promise.all([postaGet(0),postaGet(1)]).then(paint).catch(()=>{});
 }
-window.postaWeek=async id=>{      // garson: bu haftanın ve (yüklendiyse) gelecek haftanın postaları
-  pop('📅 Haftalık postam','<p class="sub">Yükleniyor…</p>',true);$('mo').textContent='Kapat';
-  try{
-    const t0=isoT(0),dow=(new Date(t0+'T00:00:00Z').getUTCDay()+6)%7,days=[];
-    for(let i=0;i<14;i++){const d=new Date(t0+'T00:00:00Z');d.setUTCDate(d.getUTCDate()-dow+i);days.push(d.toISOString().slice(0,10));}
-    const rs=await Promise.all(days.map(d=>gs('getPosta',B,d).catch(()=>({m:{}}))));
-    const GK=['Pzt','Sal','Çar','Per','Cum','Cmt','Paz'],f=x=>x.slice(8)+'.'+x.slice(5,7);
-    const my=rs.map(r=>{const m=(r&&r.m)||{};return Object.keys(m).find(p=>m[p]==id)||'';}),any=rs.map(r=>Object.keys((r&&r.m)||{}).length>0);
-    const wk=(a,b,t)=>{if(!any.slice(a,b).some(x=>x))return '';let h='<div style="font-weight:800;margin:10px 2px 4px">'+t+'</div><table class="xl xl2" style="width:100%">';
-      for(let i=a;i<b;i++)h+='<tr'+(days[i]==t0?' style="background:rgba(250,204,21,.18)"':'')+'><td class="l"><b>'+GK[i%7]+'</b> <small>'+f(days[i])+'</small></td><td>'+(any[i]?(my[i]?'<b>'+esc(my[i])+'</b>':'—'):'<span style="opacity:.4">henüz yok</span>')+'</td></tr>';
-      return h+'</table>';};
-    const html=wk(0,7,'Bu hafta')+wk(7,14,'Gelecek hafta');
-    pop('📅 Haftalık postam',html||'<p class="sub">Bu hafta için henüz posta dağıtılmamış.</p>',true);$('mo').textContent='Kapat';
-  }catch(e){pop('📅 Haftalık postam','<p class="sub">Yüklenemedi, tekrar dene.</p>',true);$('mo').textContent='Kapat';}
-};
 const srvOf_=s=>String(s.sec||'').toLocaleUpperCase('tr').replace(/İ/g,'I').indexOf('SERV')==0;
 let TRC=null;
 function trophyFill(s0){
